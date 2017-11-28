@@ -1,0 +1,24 @@
+.custom-labels .rangeslider-horizontal .rangeslider__handle {
+    width:24px;
+    height:24px;
+    border-radius:20px;
+    text-align:center;
+    font-size: 10px;
+}
+.custom-labels .rangeslider-horizontal .rangeslider__handle:after {
+    position:static
+}
+.custom-labels .rangeslider-horizontal .rangeslider__label {
+    top:18px
+}
+.custom-labels .rangeslider-horizontal .rangeslider__handle-tooltip {
+    width:60px;
+    left:50%;
+    transform:translate3d(-50%,0,0)
+}
+.custom-labels .rangeslider-horizontal .rangeslider__handle-label {
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate3d(-50%,-50%,0)
+}
