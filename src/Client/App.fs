@@ -1,5 +1,7 @@
 module Client.App
 
+open Aether
+open Aether.Operators
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Helpers.React
@@ -12,308 +14,203 @@ open Fable.Import.Browser
 open Elmish.Browser.Navigation
 open Elmish.HMR
 
+open VolcaFM
+
 JsInterop.importSideEffects "whatwg-fetch"
 JsInterop.importSideEffects "babel-polyfill"
 
 module P = Fable.Helpers.React.Props
 module S = Client.Style
 
-type OperatorType = 
-  | Carrier
-  | Modulator
+type Model = { MidiEnabled : bool
+               Patch : Patch
+               Operator1Type : OperatorType
+               Operator2Type : OperatorType
+               Operator3Type : OperatorType
+               Operator4Type : OperatorType
+               Operator5Type : OperatorType
+               Operator6Type : OperatorType
+               ErrorMessage: string option
+               MidiErrorMessage: string option }
 
-type OscillatorMode =
-  | Ratio
-  | Fixed
-
-// Model
-type OperatorModel =
-  { Title : string
-    Type : OperatorType
-    Enabled : bool
-    EGRate1 : int
-    EGRate2 : int
-    EGRate3 : int
-    EGRate4 : int
-    EGLevel1 : int
-    EGLevel2 : int
-    EGLevel3 : int
-    EGLevel4 : int
-    LevelScaleBreakpoint : int
-    LevelScaleLeftDepth : int
-    LevelScaleRightDepth : int
-    LevelScaleLeftCurve : int
-    LevelScaleRightCurve : int
-    OscillatorRateScale : int
-    Detune : int
-    FrequencyCoarse : int
-    FrequencyFine : int 
-    OscillatorMode : OscillatorMode
-    AmpModSense : int
-    KeyVelocitySense : int
-    OperatorOutputLevel : int }
-
-type Model = { Algorithm: int
-               Feedback: int
-               OscillatorKeySync: int
-               Transpose: int
-               PitchRate1: int
-               PitchRate2: int
-               PitchRate3: int
-               PitchRate4: int
-               PitchLevel1: int
-               PitchLevel2: int
-               PitchLevel3: int
-               PitchLevel4: int
-               LFOSpeed: int
-               LFOWaveShape: int
-               LFOPitchModDepth: int
-               LFOAmpModDepth: int
-               LFODelay: int
-               LFOKeySync: int
-               PitchModSensitivity: int
-               PatchName: string
-               Operator1: OperatorModel
-               Operator2: OperatorModel
-               Operator3: OperatorModel
-               Operator4: OperatorModel
-               Operator5: OperatorModel
-               Operator6: OperatorModel }
+             static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
+  
+let sysexData model = model.Patch |> toSysexMessage
 
 type OperatorMsg = 
-  | TypeChanged of OperatorType
   | EnabledChanged of bool
-  | EGRate1Changed of int
-  | EGRate2Changed of int
-  | EGRate3Changed of int
-  | EGRate4Changed of int
-  | EGLevel1Changed of int
-  | EGLevel2Changed of int
-  | EGLevel3Changed of int
-  | EGLevel4Changed of int
-  | LevelScaleBreakpointChanged of int
-  | LevelScaleLeftDepthChanged of int
-  | LevelScaleRightDepthChanged of int
-  | LevelScaleLeftCurveChanged of int
-  | LevelScaleRightCurveChanged of int
-  | OscillatorRateScaleChanged of int
-  | DetuneChanged of int
-  | FrequencyCoarseChanged of int
-  | FrequencyFineChanged of int
-  | OscillatorModeChanged of string
-  | AmpModSenseChanged of int
-  | KeyVelocitySenseChanged of int
-  | OperatorOutputLevelChanged of int
+  | EGRate1Changed of byte
+  | EGRate2Changed of byte
+  | EGRate3Changed of byte
+  | EGRate4Changed of byte
+  | EGLevel1Changed of byte
+  | EGLevel2Changed of byte
+  | EGLevel3Changed of byte
+  | EGLevel4Changed of byte
+  | LevelScaleBreakpointChanged of byte
+  | LevelScaleLeftDepthChanged of byte
+  | LevelScaleRightDepthChanged of byte
+  | LevelScaleLeftCurveChanged of byte
+  | LevelScaleRightCurveChanged of byte
+  | OscillatorRateScaleChanged of byte
+  | DetuneChanged of byte
+  | FrequencyCoarseChanged of byte
+  | FrequencyFineChanged of byte
+  | OscillatorModeChanged of byte
+  | AmpModSenseChanged of byte
+  | KeyVelocitySenseChanged of byte
+  | OperatorOutputLevelChanged of byte
+  | OperatorSliderComplete
 
 type Msg =
-  | AlgorithmChanged of int
-  | FeedbackChanged of int
-  | OscillatorKeySyncChanged of int
-  | TransposeChanged of int
-  | PitchRate1Changed of int
-  | PitchRate2Changed of int
-  | PitchRate3Changed of int
-  | PitchRate4Changed of int
-  | PitchLevel1Changed of int
-  | PitchLevel2Changed of int
-  | PitchLevel3Changed of int
-  | PitchLevel4Changed of int
-  | LFOSpeedChanged of int
-  | LFOWaveShapeChanged of int
-  | LFOPitchModDepthChanged of int
-  | LFOAmpModDepthChanged of int
-  | LFODelayChanged of int
-  | LFOKeySyncChanged of int
-  | PitchModSensitivityChanged of int
+  | AlgorithmChanged of byte
+  | FeedbackChanged of byte
+  | OscillatorKeySyncChanged of byte
+  | TransposeChanged of byte
+  | PitchRate1Changed of byte
+  | PitchRate2Changed of byte
+  | PitchRate3Changed of byte
+  | PitchRate4Changed of byte
+  | PitchLevel1Changed of byte
+  | PitchLevel2Changed of byte
+  | PitchLevel3Changed of byte
+  | PitchLevel4Changed of byte
+  | LFOSpeedChanged of byte
+  | LFOWaveShapeChanged of byte
+  | LFOPitchModDepthChanged of byte
+  | LFOAmpModDepthChanged of byte
+  | LFODelayChanged of byte
+  | LFOKeySyncChanged of byte
+  | PitchModSensitivityChanged of byte
   | PatchNameChanged of string
+  | SliderComplete
   | Operator1Msg of OperatorMsg
   | Operator2Msg of OperatorMsg
   | Operator3Msg of OperatorMsg
   | Operator4Msg of OperatorMsg
   | Operator5Msg of OperatorMsg
   | Operator6Msg of OperatorMsg
+  | SaveSuccess
+  | SaveError of string
+  | MidiSuccess of unit
+  | MidiError of exn
 
-let initOperator title opType : OperatorModel =
-  { Title = title
-    Type = opType
-    Enabled = false
-    EGRate1 = 0
-    EGRate2 = 0
-    EGRate3 = 0
-    EGRate4 = 0
-    EGLevel1 = 0
-    EGLevel2 = 0
-    EGLevel3 = 0
-    EGLevel4 = 0
-    LevelScaleBreakpoint = 0
-    LevelScaleLeftDepth = 0
-    LevelScaleRightDepth = 0
-    LevelScaleLeftCurve = 0
-    LevelScaleRightCurve = 0
-    OscillatorRateScale = 0
-    Detune = 0
-    FrequencyCoarse = 0
-    FrequencyFine = 0
-    OscillatorMode = Ratio
-    AmpModSense = 0
-    KeyVelocitySense = 0
-    OperatorOutputLevel = 0 }
+let updateOperatorTypes model =
+  let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
+  
+  { model with Operator1Type = op1
+               Operator2Type = op2
+               Operator3Type = op3
+               Operator4Type = op4
+               Operator5Type = op5
+               Operator6Type = op6 }
 
 let init () : Model*Cmd<Msg> =
-  { Algorithm = 1
-    Feedback = 0
-    OscillatorKeySync = 0
-    Transpose = 0
-    PitchRate1 = 0
-    PitchRate2 = 0
-    PitchRate3 = 0
-    PitchRate4 = 0
-    PitchLevel1 = 0
-    PitchLevel2 = 0
-    PitchLevel3 = 0
-    PitchLevel4 = 0
-    LFOSpeed = 0
-    LFOWaveShape = 0
-    LFOPitchModDepth = 0
-    LFOAmpModDepth = 0
-    LFODelay = 0
-    LFOKeySync = 0
-    PitchModSensitivity = 0
-    PatchName = ""
-    Operator1 = initOperator "Operator 1" Carrier
-    Operator2 = initOperator "Operator 2" Modulator
-    Operator3 = initOperator "Operator 3" Carrier
-    Operator4 = initOperator "Operator 4" Modulator
-    Operator5 = initOperator "Operator 5" Modulator
-    Operator6 = initOperator "Operator 6" Modulator }, Cmd.none
-
-let updateOperator (msg: OperatorMsg) (model: OperatorModel) : OperatorModel*Cmd<OperatorMsg> =
-    match msg with
-    | TypeChanged v -> { model with Type = v }, Cmd.none
-    | EnabledChanged v -> { model with Enabled = v }, Cmd.none
-    | EGRate1Changed v -> { model with EGRate1 = v }, Cmd.none
-    | EGRate2Changed v -> { model with EGRate2 = v }, Cmd.none
-    | EGRate3Changed v -> { model with EGRate3 = v }, Cmd.none
-    | EGRate4Changed v -> { model with EGRate4 = v }, Cmd.none
-    | EGLevel1Changed v -> { model with EGLevel1 = v }, Cmd.none
-    | EGLevel2Changed v -> { model with EGLevel2 = v }, Cmd.none
-    | EGLevel3Changed v -> { model with EGLevel3 = v }, Cmd.none
-    | EGLevel4Changed v -> { model with EGLevel4 = v }, Cmd.none
-    | LevelScaleBreakpointChanged v -> { model with LevelScaleBreakpoint = v }, Cmd.none
-    | LevelScaleLeftDepthChanged v -> { model with LevelScaleLeftDepth = v }, Cmd.none
-    | LevelScaleRightDepthChanged v -> { model with LevelScaleRightDepth = v }, Cmd.none
-    | LevelScaleLeftCurveChanged v -> { model with LevelScaleLeftCurve = v }, Cmd.none
-    | LevelScaleRightCurveChanged v -> { model with LevelScaleRightCurve = v }, Cmd.none
-    | OscillatorRateScaleChanged v -> { model with OscillatorRateScale = v }, Cmd.none
-    | DetuneChanged v -> { model with Detune = v }, Cmd.none
-    | FrequencyCoarseChanged v -> { model with FrequencyCoarse = v }, Cmd.none
-    | FrequencyFineChanged v -> { model with FrequencyFine = v }, Cmd.none
-    | OscillatorModeChanged v -> { model with OscillatorMode = if v = "0" then Ratio else Fixed }, Cmd.none
-    | AmpModSenseChanged v -> { model with AmpModSense = v }, Cmd.none
-    | KeyVelocitySenseChanged v -> { model with KeyVelocitySense = v }, Cmd.none
-    | OperatorOutputLevelChanged v -> { model with OperatorOutputLevel = v }, Cmd.none
+  let m =
+    { MidiEnabled = false
+      Patch = initPatch ()
+      Operator1Type = Carrier
+      Operator2Type = Carrier
+      Operator3Type = Carrier
+      Operator4Type = Carrier
+      Operator5Type = Carrier
+      Operator6Type = Carrier
+      ErrorMessage = None
+      MidiErrorMessage = None }
+    |> updateOperatorTypes
   
-let algorithms = [
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Modulator, Carrier, Modulator, Modulator
-  Carrier, Modulator, Modulator, Carrier, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Carrier, Modulator
-  Carrier, Modulator, Carrier, Modulator, Carrier, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Modulator, Carrier, Modulator, Modulator
+  m, (Cmd.ofPromise Midi.requestMIDIAccess () MidiSuccess MidiError)
 
-  Carrier, Modulator, Modulator, Carrier, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Modulator
-  Carrier, Modulator, Modulator, Modulator, Modulator, Modulator
-  Carrier, Modulator, Modulator, Modulator, Modulator, Modulator
-  Carrier, Modulator, Modulator, Modulator, Modulator, Modulator
-  
-  Carrier, Modulator, Modulator, Carrier, Carrier, Modulator
-  Carrier, Carrier, Modulator, Carrier, Modulator, Modulator
-  Carrier, Carrier, Modulator, Carrier, Carrier, Modulator
-  Carrier, Modulator, Carrier, Carrier, Carrier, Modulator
-  Carrier, Carrier, Modulator, Carrier, Carrier, Modulator
-  Carrier, Carrier, Carrier, Carrier, Carrier, Modulator
-  Carrier, Carrier, Carrier, Carrier, Carrier, Modulator
-  
-  Carrier, Carrier, Modulator, Carrier, Modulator, Modulator
-  Carrier, Carrier, Modulator, Carrier, Modulator, Modulator
-  Carrier, Modulator, Carrier, Modulator, Modulator, Carrier
-  Carrier, Carrier, Carrier, Modulator, Carrier, Modulator
-  Carrier, Carrier, Carrier, Modulator, Modulator, Carrier
-  Carrier, Carrier, Carrier, Carrier, Carrier, Modulator
-  Carrier, Carrier, Carrier, Carrier, Carrier, Carrier
-]
+let updateOperator msg model op: Model =
+  let operator = Model.patch >-> op
 
-let updateAlgorithm model algo =
-  let op1, op2, op3, op4, op5, op6 = algorithms.[algo - 1]
-  { model with Algorithm = algo
-               Operator1 = { model.Operator1 with Type = op1 }
-               Operator2 = { model.Operator2 with Type = op2 }
-               Operator3 = { model.Operator3 with Type = op3 }
-               Operator4 = { model.Operator4 with Type = op4 }
-               Operator5 = { model.Operator5 with Type = op5 }
-               Operator6 = { model.Operator6 with Type = op6 } }
-
-let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   match msg with
-  | AlgorithmChanged v -> (updateAlgorithm model v), Cmd.none
-  | FeedbackChanged v -> { model with Feedback = v }, Cmd.none
-  | OscillatorKeySyncChanged v -> { model with OscillatorKeySync = v }, Cmd.none
-  | TransposeChanged v -> { model with Transpose = v }, Cmd.none
-  | PitchRate1Changed v -> { model with PitchRate1 = v}, Cmd.none
-  | PitchRate2Changed v -> { model with PitchRate2 = v}, Cmd.none
-  | PitchRate3Changed v -> { model with PitchRate3 = v}, Cmd.none
-  | PitchRate4Changed v -> { model with PitchRate4 = v}, Cmd.none
-  | PitchLevel1Changed v -> { model with PitchLevel1 = v}, Cmd.none
-  | PitchLevel2Changed v -> { model with PitchLevel2 = v}, Cmd.none
-  | PitchLevel3Changed v -> { model with PitchLevel3 = v}, Cmd.none
-  | PitchLevel4Changed v -> { model with PitchLevel4 = v}, Cmd.none
-  | LFOSpeedChanged v -> { model with LFOSpeed = v }, Cmd.none
-  | LFOWaveShapeChanged v -> { model with LFOWaveShape = v }, Cmd.none
-  | LFOPitchModDepthChanged v -> { model with LFOPitchModDepth = v }, Cmd.none
-  | LFOAmpModDepthChanged v -> { model with LFOAmpModDepth = v }, Cmd.none
-  | LFODelayChanged v -> { model with LFODelay = v }, Cmd.none
-  | LFOKeySyncChanged v -> { model with LFOKeySync = v }, Cmd.none
-  | PitchModSensitivityChanged v -> { model with PitchModSensitivity = v }, Cmd.none
-  | PatchNameChanged v -> { model with PatchName = v }, Cmd.none
-  | Operator1Msg msg ->
-    let m, c = updateOperator msg model.Operator1
-    { model with Operator1 = m }, Cmd.map Operator1Msg c
-  | Operator2Msg msg ->
-    let m, c = updateOperator msg model.Operator2
-    { model with Operator2 = m }, Cmd.map Operator2Msg c
-  | Operator3Msg msg ->
-    let m, c = updateOperator msg model.Operator3
-    { model with Operator3 = m }, Cmd.map Operator3Msg c
-  | Operator4Msg msg ->
-    let m, c = updateOperator msg model.Operator4
-    { model with Operator4 = m }, Cmd.map Operator4Msg c
-  | Operator5Msg msg ->
-    let m, c = updateOperator msg model.Operator5
-    { model with Operator5 = m }, Cmd.map Operator5Msg c
-  | Operator6Msg msg ->
-    let m, c = updateOperator msg model.Operator6
-    { model with Operator6 = m }, Cmd.map Operator6Msg c
+  | EnabledChanged v -> model |> Optic.set (operator >-> Operator.enabled) v
+  | EGRate1Changed v -> model |> Optic.set (operator >-> Operator.eGRate1) v
+  | EGRate2Changed v -> model |> Optic.set (operator >-> Operator.eGRate2) v
+  | EGRate3Changed v -> model |> Optic.set (operator >-> Operator.eGRate3) v
+  | EGRate4Changed v -> model |> Optic.set (operator >-> Operator.eGRate4) v
+  | EGLevel1Changed v -> model |> Optic.set (operator >-> Operator.eGLevel1) v
+  | EGLevel2Changed v -> model |> Optic.set (operator >-> Operator.eGLevel2) v
+  | EGLevel3Changed v -> model |> Optic.set (operator >-> Operator.eGLevel3) v
+  | EGLevel4Changed v -> model |> Optic.set (operator >-> Operator.eGLevel4) v
+  | LevelScaleBreakpointChanged v -> model |> Optic.set (operator >-> Operator.levelScaleBreakpoint) v
+  | LevelScaleLeftDepthChanged v -> model |> Optic.set (operator >-> Operator.levelScaleLeftDepth) v
+  | LevelScaleRightDepthChanged v -> model |> Optic.set (operator >-> Operator.levelScaleRightDepth) v
+  | LevelScaleLeftCurveChanged v -> model |> Optic.set (operator >-> Operator.levelScaleLeftCurve) v
+  | LevelScaleRightCurveChanged v -> model |> Optic.set (operator >-> Operator.levelScaleRightCurve) v
+  | OscillatorRateScaleChanged v -> model |> Optic.set (operator >-> Operator.oscillatorRateScale) v
+  | DetuneChanged v -> model |> Optic.set (operator >-> Operator.detune) v
+  | FrequencyCoarseChanged v -> model |> Optic.set (operator >-> Operator.frequencyCoarse) v
+  | FrequencyFineChanged v -> model |> Optic.set (operator >-> Operator.frequencyFine) v
+  | OscillatorModeChanged v -> model |> Optic.set (operator >-> Operator.oscillatorMode) v
+  | AmpModSenseChanged v -> model |> Optic.set (operator >-> Operator.ampModSense) v
+  | KeyVelocitySenseChanged v -> model |> Optic.set (operator >-> Operator.keyVelocitySense) v
+  | OperatorOutputLevelChanged v -> model |> Optic.set (operator >-> Operator.operatorOutputLevel) v
+  | OperatorSliderComplete -> model
+  
+let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
+  let patch = Model.patch
 
+  match msg with
+  | AlgorithmChanged v -> (model |> Optic.set (patch >-> Patch.algorithm) v |> updateOperatorTypes), Cmd.none
+  | FeedbackChanged v -> (model |> Optic.set (patch >-> Patch.feedback) v), Cmd.none
+  | OscillatorKeySyncChanged v -> (model |> Optic.set (patch >-> Patch.oscillatorKeySync) v), Cmd.none
+  | TransposeChanged v -> (model |> Optic.set (patch >-> Patch.transpose) v), Cmd.none
+  | PitchRate1Changed v -> (model |> Optic.set (patch >-> Patch.pitchRate1) v), Cmd.none
+  | PitchRate2Changed v -> (model |> Optic.set (patch >-> Patch.pitchRate2) v), Cmd.none
+  | PitchRate3Changed v -> (model |> Optic.set (patch >-> Patch.pitchRate3) v), Cmd.none
+  | PitchRate4Changed v -> (model |> Optic.set (patch >-> Patch.pitchRate4) v), Cmd.none
+  | PitchLevel1Changed v -> (model |> Optic.set (patch >-> Patch.pitchLevel1) v), Cmd.none
+  | PitchLevel2Changed v -> (model |> Optic.set (patch >-> Patch.pitchLevel2) v), Cmd.none
+  | PitchLevel3Changed v -> (model |> Optic.set (patch >-> Patch.pitchLevel3) v), Cmd.none
+  | PitchLevel4Changed v -> (model |> Optic.set (patch >-> Patch.pitchLevel4) v), Cmd.none
+  | LFOSpeedChanged v -> (model |> Optic.set (patch >-> Patch.lFOSpeed) v), Cmd.none
+  | LFOWaveShapeChanged v -> (model |> Optic.set (patch >-> Patch.lFOWaveShape) v), Cmd.none
+  | LFOPitchModDepthChanged v -> (model |> Optic.set (patch >-> Patch.lFOPitchModDepth) v), Cmd.none
+  | LFOAmpModDepthChanged v -> (model |> Optic.set (patch >-> Patch.lFOAmpModDepth) v), Cmd.none
+  | LFODelayChanged v -> (model |> Optic.set (patch >-> Patch.lFODelay) v), Cmd.none
+  | LFOKeySyncChanged v -> (model |> Optic.set (patch >-> Patch.lFOKeySync) v), Cmd.none
+  | PitchModSensitivityChanged v -> (model |> Optic.set (patch >-> Patch.pitchModSensitivity) v), Cmd.none
+  | PatchNameChanged v -> (model |> Optic.set (patch >-> Patch.patchName) v), Cmd.none
+  | Operator1Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator1Msg msg -> (updateOperator msg model Patch.operator1), Cmd.none
+  | Operator2Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator2Msg msg -> (updateOperator msg model Patch.operator2), Cmd.none
+  | Operator3Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator3Msg msg -> (updateOperator msg model Patch.operator3), Cmd.none
+  | Operator4Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator4Msg msg -> (updateOperator msg model Patch.operator4), Cmd.none
+  | Operator5Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator5Msg msg -> (updateOperator msg model Patch.operator5), Cmd.none
+  | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
+  | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
+  | SliderComplete -> model, Cmd.ofFunc (sysexData >> Midi.sendSysex) model (fun _ -> SaveSuccess) (fun ex -> SaveError ex.Message)
+  | SaveSuccess -> { model with ErrorMessage = None }, Cmd.none
+  | SaveError e -> { model with ErrorMessage = Some e }, Cmd.none
+  | MidiSuccess _ -> { model with MidiEnabled = true 
+                                  MidiErrorMessage = None }, Cmd.none
+  | MidiError e ->
+    let msg = if e.Message.Contains("is not a function")
+              then "WebMidi is currently only supported in Chrome!"
+              else e.Message
+
+    { model with MidiEnabled = false
+                 MidiErrorMessage = Some msg }, Cmd.none
+  
 open Client.Bindings.Slider
 open Fable.Import.React
 
-let mkSlider min max format dispatch description value event =
+let mkSlider min max format dispatch onComplete description (value: byte) event =
   div [ ClassName "form-group slider custom-labels"] [
     label [ ClassName "col-form-label" ] [ str description ]    
     slider [ Min min
              Max max
-             Value value
+             Value (int value)
              Format format
-             HandleLabel (format value)
-             OnChange (fun i -> dispatch (event i)) ] 
+             HandleLabel (format (int value))
+             OnChange (byte >> event >> dispatch)
+             OnChangeComplete onComplete ] 
   ]
 
 let card title content =
@@ -325,22 +222,24 @@ let card title content =
   ]
 
 /// Constructs the view for the application given the model.
-let viewOperator (model: OperatorModel) (dispatch: OperatorMsg -> unit) : ReactElement =
-
-  let mkSlider99 = mkSlider 0 99 string dispatch
-  let mkSlider3 = mkSlider 0 3 string dispatch
+let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) : ReactElement =
+  let operatorSliderComplete () = dispatch OperatorSliderComplete
+  let mkSlider99 = mkSlider 0 99 string dispatch operatorSliderComplete
+  let mkSlider3 = mkSlider 0 3 string dispatch operatorSliderComplete
   let mkSliderCurve =
-    let format v = match v with
-                   | v when v <= 0 -> "-LIN"
-                   | 1 -> "-EXP"
-                   | 2 -> "EXP"
-                   | v when v >= 3 -> "LIN"
-    mkSlider 0 4 format dispatch
+    let format = function
+                 | 0 -> "-LIN"
+                 | 1 -> "-EXP"
+                 | 2 -> "EXP"
+                 | 3 -> "LIN"
+                 | _ -> "?"
+
+    mkSlider 0 4 format dispatch operatorSliderComplete
     
-  let mkSlider7 = mkSlider 0 7 string dispatch
+  let mkSlider7 = mkSlider 0 7 string dispatch operatorSliderComplete
 
   let bodyClassName = if model.Enabled then " show" else ""
-  let cardClass = if model.Type = Carrier then " text-white bg-success" else " text-white bg-info"
+  let cardClass = if operatorType = Carrier then " text-white bg-success" else " text-white bg-info"
 
   div [ ClassName ("card mt-2") ] [
     div [ ClassName ("card-header" + cardClass) ] [ 
@@ -350,7 +249,7 @@ let viewOperator (model: OperatorModel) (dispatch: OperatorMsg -> unit) : ReactE
                 Checked model.Enabled
                 OnClick (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
         span [ ClassName "custom-control-indicator" ] []
-        strong [ ClassName "custom-control-description" ] [ str model.Title ]
+        strong [ ClassName "custom-control-description" ] [ str (sprintf "%s (%A)" title operatorType) ]
       ]
     ]
 
@@ -378,15 +277,15 @@ let viewOperator (model: OperatorModel) (dispatch: OperatorMsg -> unit) : ReactE
           mkSlider7 "Oscillator Rate Scale" model.OscillatorRateScale OscillatorRateScaleChanged
         ]
         card "Operator tuning" [
-          mkSlider 0 14 string dispatch "Detune" model.Detune DetuneChanged
-          mkSlider 0 31 string dispatch "Frequency Coarse" model.FrequencyCoarse FrequencyCoarseChanged
+          mkSlider 0 14 string dispatch operatorSliderComplete "Detune" model.Detune DetuneChanged
+          mkSlider 0 31 string dispatch operatorSliderComplete "Frequency Coarse" model.FrequencyCoarse FrequencyCoarseChanged
           mkSlider99 "Frequency Fine" model.FrequencyFine FrequencyFineChanged
 
           div [ ClassName "form-group" ] [
             label [ ClassName "col-form-label" ] [ str "Oscillator mode" ]
             br []
-            S.radioInline "Ratio" "0" (model.OscillatorMode = Ratio) (fun _ -> dispatch (OscillatorModeChanged "0"))
-            S.radioInline "Fixed" "1" (model.OscillatorMode = Fixed) (fun _ -> dispatch (OscillatorModeChanged "1"))
+            S.radioInline "Ratio" "0" (model.OscillatorMode = 0uy) (fun _ -> dispatch (OscillatorModeChanged 0uy))
+            S.radioInline "Fixed" "1" (model.OscillatorMode = 1uy) (fun _ -> dispatch (OscillatorModeChanged 1uy))
           ]
         ]
         card "Operator Levels and Sensitivity" [
@@ -399,7 +298,8 @@ let viewOperator (model: OperatorModel) (dispatch: OperatorMsg -> unit) : ReactE
   ]
 
 let view model dispatch =
-  let mkSlider99 = mkSlider 0 99 string dispatch
+  let sliderComplete () = dispatch SliderComplete
+  let mkSlider99 = mkSlider 0 99 string dispatch sliderComplete
   let formatWave =
     function
     | 0 -> "TRI"
@@ -410,10 +310,12 @@ let view model dispatch =
     | 5 -> "HLD"
     | _ -> "?"
 
-  let operator opModel opMsg =
+  let formatAlgorithm = ((+) 1) >> string
+
+  let operator title opType opModel opMsg =
     div [ ClassName "row" ] [ 
       div [ ClassName "col" ] [
-        viewOperator opModel (opMsg >> dispatch)
+        viewOperator opModel opType title (opMsg >> dispatch)
       ]
     ]
 
@@ -421,71 +323,76 @@ let view model dispatch =
     yield div [ ClassName "row mt-2" ] [
       card "Setup" [ 
         div [ ClassName "row" ] [ 
-          card "Midi device setup" []
+          card "Midi device setup" [
+            match model.MidiErrorMessage with
+            | Some m -> yield str m
+            | _ -> ()
+          ]
           card "Save / Load / Share" []
         ]
       ]
     ]
 
-    yield div [ ClassName "row mt-2" ] [
-      card "Global voice controls" [
-        div [ ClassName "row" ] [ 
+    if model.MidiEnabled then
+      yield div [ ClassName "row mt-2" ] [
+        card "Global voice controls" [
+          div [ ClassName "row" ] [ 
           card "Operator settings" [
-            mkSlider 1 32 string dispatch "Algorithm" model.Algorithm AlgorithmChanged
-            mkSlider 0 7 string dispatch "Feedback" model.Feedback FeedbackChanged
+            mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
+            mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
             div [ ClassName "form-group" ] [
               label [ ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
               br []
-              S.radioInline "Off" "0" (model.OscillatorKeySync = 0) (fun _ -> dispatch (OscillatorKeySyncChanged 0))
-              S.radioInline "On" "1" (model.OscillatorKeySync = 1) (fun _ -> dispatch (OscillatorKeySyncChanged 1))
+              S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
+              S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
             ]
-            mkSlider 0 48 string dispatch "Transpose" model.Transpose TransposeChanged
+            mkSlider 0 48 string dispatch sliderComplete "Transpose" model.Patch.Transpose TransposeChanged
           ]
           card "Pitch envelope rates" [
-            mkSlider99 "Pitch EG R1" model.PitchRate1 PitchRate1Changed
-            mkSlider99 "Pitch EG R2" model.PitchRate2 PitchRate2Changed
-            mkSlider99 "Pitch EG R3" model.PitchRate3 PitchRate3Changed
-            mkSlider99 "Pitch EG R4" model.PitchRate4 PitchRate4Changed
+            mkSlider99 "Pitch EG R1" model.Patch.PitchRate1 PitchRate1Changed
+            mkSlider99 "Pitch EG R2" model.Patch.PitchRate2 PitchRate2Changed
+            mkSlider99 "Pitch EG R3" model.Patch.PitchRate3 PitchRate3Changed
+            mkSlider99 "Pitch EG R4" model.Patch.PitchRate4 PitchRate4Changed
           ]
           card "Pitch envelope levels" [
-            mkSlider99 "Pitch EG L1" model.PitchLevel1 PitchLevel1Changed
-            mkSlider99 "Pitch EG L2" model.PitchLevel2 PitchLevel2Changed
-            mkSlider99 "Pitch EG L3" model.PitchLevel3 PitchLevel3Changed
-            mkSlider99 "Pitch EG L4" model.PitchLevel4 PitchLevel4Changed
+            mkSlider99 "Pitch EG L1" model.Patch.PitchLevel1 PitchLevel1Changed
+            mkSlider99 "Pitch EG L2" model.Patch.PitchLevel2 PitchLevel2Changed
+            mkSlider99 "Pitch EG L3" model.Patch.PitchLevel3 PitchLevel3Changed
+            mkSlider99 "Pitch EG L4" model.Patch.PitchLevel4 PitchLevel4Changed
           ]
           card "LFO settings" [
-            mkSlider99 "LFO Speed" model.LFOSpeed LFOSpeedChanged
-            mkSlider 0 5 formatWave dispatch "LFO Wave Shape" model.LFOWaveShape LFOWaveShapeChanged
-            mkSlider99 "LFO Pitch Mod Depth" model.LFOPitchModDepth LFOPitchModDepthChanged
-            mkSlider99 "LFO Amp Mod Depth" model.LFOAmpModDepth LFOAmpModDepthChanged
-            mkSlider99 "LFO Delay" model.LFODelay LFODelayChanged
+            mkSlider99 "LFO Speed" model.Patch.LFOSpeed LFOSpeedChanged
+            mkSlider 0 5 formatWave dispatch sliderComplete "LFO Wave Shape" model.Patch.LFOWaveShape LFOWaveShapeChanged
+            mkSlider99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged
+            mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
+            mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
             div [ ClassName "form-group" ] [
               label [ ClassName "col-form-label" ] [ str "LFO Key Sync" ]
               br []
-              S.radioInline "Off" "0" (model.LFOKeySync = 0) (fun _ -> dispatch (LFOKeySyncChanged 0))
-              S.radioInline "On" "1" (model.LFOKeySync = 1) (fun _ -> dispatch (LFOKeySyncChanged 1))
+              S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
+              S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
             ]
-            mkSlider 0 7 string dispatch "Pitch Mod Sensitivity" model.PitchModSensitivity PitchModSensitivityChanged
+            mkSlider 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged
           ]
           card "Patch settings" [
             div [ ClassName "form-group" ] [
               label [ ClassName "col-form-label" ] [ str "Patch name" ]
               input [ ClassName "form-control"
                       Type "text"
-                      P.Value model.PatchName
+                      P.Value model.Patch.PatchName
                       P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
             ]
           ]
+          ]
         ]
       ]
-    ]
 
-    yield operator model.Operator1 Operator1Msg
-    yield operator model.Operator2 Operator2Msg
-    yield operator model.Operator3 Operator3Msg
-    yield operator model.Operator4 Operator4Msg
-    yield operator model.Operator5 Operator5Msg
-    yield operator model.Operator6 Operator6Msg
+      yield operator "Operator 1" model.Operator1Type model.Patch.Operator1 Operator1Msg
+      yield operator "Operator 2" model.Operator2Type model.Patch.Operator2 Operator2Msg
+      yield operator "Operator 3" model.Operator3Type model.Patch.Operator3 Operator3Msg
+      yield operator "Operator 4" model.Operator4Type model.Patch.Operator4 Operator4Msg
+      yield operator "Operator 5" model.Operator5Type model.Patch.Operator5 Operator5Msg
+      yield operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg
   ]
 
 open Elmish.React

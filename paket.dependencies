@@ -1,6 +1,7 @@
 source https://nuget.org/api/v2
 storage:none
 
+nuget Fable.Aether
 nuget FSharp.Core redirects: force
 nuget Fable.JsonConverter
 nuget Suave
