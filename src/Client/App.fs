@@ -15,6 +15,7 @@ open Elmish.Browser.Navigation
 open Elmish.HMR
 
 open VolcaFM
+open Midi
 
 JsInterop.importSideEffects "whatwg-fetch"
 JsInterop.importSideEffects "babel-polyfill"
@@ -31,7 +32,8 @@ type Model = { MidiEnabled : bool
                Operator5Type : OperatorType
                Operator6Type : OperatorType
                ErrorMessage: string option
-               MidiErrorMessage: string option }
+               MidiErrorMessage: string option
+               MidiAccess: IMIDIAccess option }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
   
@@ -92,7 +94,7 @@ type Msg =
   | Operator6Msg of OperatorMsg
   | SaveSuccess
   | SaveError of string
-  | MidiSuccess of unit
+  | MidiSuccess of IMIDIAccess
   | MidiError of exn
 
 let updateOperatorTypes model =
@@ -116,10 +118,11 @@ let init () : Model*Cmd<Msg> =
       Operator5Type = Carrier
       Operator6Type = Carrier
       ErrorMessage = None
-      MidiErrorMessage = None }
+      MidiErrorMessage = None
+      MidiAccess = None }
     |> updateOperatorTypes
   
-  m, (Cmd.ofPromise Midi.requestMIDIAccess () MidiSuccess MidiError)
+  m, (Cmd.ofPromise requestMIDIAccess { SysEx = Some true; Software = None } MidiSuccess MidiError)
 
 let updateOperator msg model op: Model =
   let operator = Model.patch >-> op
@@ -188,15 +191,19 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | SliderComplete -> model, Cmd.ofFunc (sysexData >> Midi.sendSysex) model (fun _ -> SaveSuccess) (fun ex -> SaveError ex.Message)
   | SaveSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SaveError e -> { model with ErrorMessage = Some e }, Cmd.none
-  | MidiSuccess _ -> { model with MidiEnabled = true 
-                                  MidiErrorMessage = None }, Cmd.none
+  | MidiSuccess a -> 
+    printfn "MIDIAccess: %A" a
+    { model with MidiEnabled = true 
+                 MidiErrorMessage = None
+                 MidiAccess = Some a }, Cmd.none
   | MidiError e ->
     let msg = if e.Message.Contains("is not a function")
               then "WebMidi is currently only supported in Chrome!"
               else e.Message
 
     { model with MidiEnabled = false
-                 MidiErrorMessage = Some msg }, Cmd.none
+                 MidiErrorMessage = Some msg
+                 MidiAccess = None }, Cmd.none
   
 open Client.Bindings.Slider
 open Fable.Import.React
@@ -247,7 +254,7 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
         input [ Type "checkbox" 
                 ClassName "custom-control-input"
                 Checked model.Enabled
-                OnClick (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
+                OnChange (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
         span [ ClassName "custom-control-indicator" ] []
         strong [ ClassName "custom-control-description" ] [ str (sprintf "%s (%A)" title operatorType) ]
       ]
@@ -327,6 +334,8 @@ let view model dispatch =
             match model.MidiErrorMessage with
             | Some m -> yield str m
             | _ -> ()
+
+            yield str (sprintf "%A" model.MidiAccess)
           ]
           card "Save / Load / Share" []
         ]
@@ -337,52 +346,52 @@ let view model dispatch =
       yield div [ ClassName "row mt-2" ] [
         card "Global voice controls" [
           div [ ClassName "row" ] [ 
-          card "Operator settings" [
-            mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
-            mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
-            div [ ClassName "form-group" ] [
-              label [ ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
-              br []
-              S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
-              S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
+            card "Operator settings" [
+              mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
+              mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
+              div [ ClassName "form-group" ] [
+                label [ ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
+                br []
+                S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
+                S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
+              ]
+              mkSlider 0 48 string dispatch sliderComplete "Transpose" model.Patch.Transpose TransposeChanged
             ]
-            mkSlider 0 48 string dispatch sliderComplete "Transpose" model.Patch.Transpose TransposeChanged
-          ]
-          card "Pitch envelope rates" [
-            mkSlider99 "Pitch EG R1" model.Patch.PitchRate1 PitchRate1Changed
-            mkSlider99 "Pitch EG R2" model.Patch.PitchRate2 PitchRate2Changed
-            mkSlider99 "Pitch EG R3" model.Patch.PitchRate3 PitchRate3Changed
-            mkSlider99 "Pitch EG R4" model.Patch.PitchRate4 PitchRate4Changed
-          ]
-          card "Pitch envelope levels" [
-            mkSlider99 "Pitch EG L1" model.Patch.PitchLevel1 PitchLevel1Changed
-            mkSlider99 "Pitch EG L2" model.Patch.PitchLevel2 PitchLevel2Changed
-            mkSlider99 "Pitch EG L3" model.Patch.PitchLevel3 PitchLevel3Changed
-            mkSlider99 "Pitch EG L4" model.Patch.PitchLevel4 PitchLevel4Changed
-          ]
-          card "LFO settings" [
-            mkSlider99 "LFO Speed" model.Patch.LFOSpeed LFOSpeedChanged
-            mkSlider 0 5 formatWave dispatch sliderComplete "LFO Wave Shape" model.Patch.LFOWaveShape LFOWaveShapeChanged
-            mkSlider99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged
-            mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
-            mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
-            div [ ClassName "form-group" ] [
-              label [ ClassName "col-form-label" ] [ str "LFO Key Sync" ]
-              br []
-              S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
-              S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
+            card "Pitch envelope rates" [
+              mkSlider99 "Pitch EG R1" model.Patch.PitchRate1 PitchRate1Changed
+              mkSlider99 "Pitch EG R2" model.Patch.PitchRate2 PitchRate2Changed
+              mkSlider99 "Pitch EG R3" model.Patch.PitchRate3 PitchRate3Changed
+              mkSlider99 "Pitch EG R4" model.Patch.PitchRate4 PitchRate4Changed
             ]
-            mkSlider 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged
-          ]
-          card "Patch settings" [
-            div [ ClassName "form-group" ] [
-              label [ ClassName "col-form-label" ] [ str "Patch name" ]
-              input [ ClassName "form-control"
-                      Type "text"
-                      P.Value model.Patch.PatchName
-                      P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
+            card "Pitch envelope levels" [
+              mkSlider99 "Pitch EG L1" model.Patch.PitchLevel1 PitchLevel1Changed
+              mkSlider99 "Pitch EG L2" model.Patch.PitchLevel2 PitchLevel2Changed
+              mkSlider99 "Pitch EG L3" model.Patch.PitchLevel3 PitchLevel3Changed
+              mkSlider99 "Pitch EG L4" model.Patch.PitchLevel4 PitchLevel4Changed
             ]
-          ]
+            card "LFO settings" [
+              mkSlider99 "LFO Speed" model.Patch.LFOSpeed LFOSpeedChanged
+              mkSlider 0 5 formatWave dispatch sliderComplete "LFO Wave Shape" model.Patch.LFOWaveShape LFOWaveShapeChanged
+              mkSlider99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged
+              mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
+              mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
+              div [ ClassName "form-group" ] [
+                label [ ClassName "col-form-label" ] [ str "LFO Key Sync" ]
+                br []
+                S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
+                S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
+              ]
+              mkSlider 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged
+            ]
+            card "Patch settings" [
+              div [ ClassName "form-group" ] [
+                label [ ClassName "col-form-label" ] [ str "Patch name" ]
+                input [ ClassName "form-control"
+                        Type "text"
+                        P.Value model.Patch.PatchName
+                        P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
+              ]
+            ]
           ]
         ]
       ]
