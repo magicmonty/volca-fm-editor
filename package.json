@@ -3,12 +3,12 @@
   "dependencies": {
     "babel-polyfill": "6.26.0",
     "babel-runtime": "6.26.0",
-    "moment": "^2.19.2",
+    "moment": "^2.19.3",
     "phantomjs-prebuilt": "^2.1.7",
-    "react": "^16.1.1",
+    "react": "^16.2.0",
     "react-bootstrap": "^0.31.5",
     "react-datetime": "^2.11.0",
-    "react-dom": "^16.1.1",
+    "react-dom": "^16.2.0",
     "react-rangeslider": "^2.2.0",
     "remotedev": "0.2.7"
   },
@@ -19,11 +19,11 @@
     "babel-preset-env": "^1.6.1",
     "concurrently": "^3.5.1",
     "css-loader": "^0.28.7",
-    "fable-loader": "^1.1.4",
+    "fable-loader": "^1.1.6",
     "fable-utils": "1.0.6",
     "style-loader": "^0.19.0",
-    "webpack": "^3.8.1",
-    "webpack-dev-server": "^2.9.4"
+    "webpack": "^3.9.1",
+    "webpack-dev-server": "^2.9.5"
   },
   "scripts": {
     "prebuildServer": "dotnet restore src/Server/Server.fsproj",
