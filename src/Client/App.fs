@@ -10,18 +10,28 @@ open Fable.Helpers.React.Props
 open Fable.Import
 open Elmish
 open Elmish.React
-open Fable.Import.Browser
-open Elmish.Browser.Navigation
-open Elmish.HMR
 
 open VolcaFM
 open Midi
+open System
+open System.Runtime.Serialization
 
 JsInterop.importSideEffects "whatwg-fetch"
 JsInterop.importSideEffects "babel-polyfill"
 
 module P = Fable.Helpers.React.Props
 module S = Client.Style
+
+module String = 
+  let isNotEmpty v = not (String.IsNullOrEmpty v)
+
+type MessagePriority =
+  | Info
+  | Success
+  | Warning
+  | Error
+
+type Alert = MessagePriority*string
 
 type Model = { MidiEnabled : bool
                Patch : Patch
@@ -33,11 +43,14 @@ type Model = { MidiEnabled : bool
                Operator6Type : OperatorType
                ErrorMessage: string option
                MidiErrorMessage: string option
-               MidiAccess: IMIDIAccess option }
+               MidiAccess: obj option
+               MidiMessages : Alert list
+               SelectedMIDIOutput : obj option
+               SelectedMIDIChannel : byte }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
   
-let sysexData model = model.Patch |> toSysexMessage
+let sysexData model = model.Patch |> toSysexMessage |> List.toArray
 
 type OperatorMsg = 
   | EnabledChanged of bool
@@ -93,9 +106,14 @@ type Msg =
   | Operator5Msg of OperatorMsg
   | Operator6Msg of OperatorMsg
   | SaveSuccess
-  | SaveError of string
-  | MidiSuccess of IMIDIAccess
+  | SendError of string
+  | SendSuccess
+  | MidiSuccess of obj
   | MidiError of exn
+  | MidiMessage of Alert
+  | MidiOutputChanged of obj
+  | MidiChannelChanged of byte
+  | SendSysex
 
 let updateOperatorTypes model =
   let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
@@ -119,10 +137,13 @@ let init () : Model*Cmd<Msg> =
       Operator6Type = Carrier
       ErrorMessage = None
       MidiErrorMessage = None
-      MidiAccess = None }
+      MidiAccess = None
+      MidiMessages = []
+      SelectedMIDIOutput = None
+      SelectedMIDIChannel = 1uy }
     |> updateOperatorTypes
   
-  m, (Cmd.ofPromise requestMIDIAccess { SysEx = Some true; Software = None } MidiSuccess MidiError)
+  m, (Cmd.ofPromise MIDI.requestAccess [ Sysex true ] MidiSuccess MidiError)
 
 let updateOperator msg model op: Model =
   let operator = Model.patch >-> op
@@ -154,6 +175,9 @@ let updateOperator msg model op: Model =
   
 let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   let patch = Model.patch
+  let success msg = Cmd.ofMsg (MidiMessage (Success, msg))
+  let error msg = Cmd.ofMsg (MidiMessage (Error, msg))
+  let warning  msg = Cmd.ofMsg (MidiMessage (Warning, msg))
 
   match msg with
   | AlgorithmChanged v -> (model |> Optic.set (patch >-> Patch.algorithm) v |> updateOperatorTypes), Cmd.none
@@ -188,23 +212,40 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | Operator5Msg msg -> (updateOperator msg model Patch.operator5), Cmd.none
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
-  | SliderComplete -> model, Cmd.ofFunc (sysexData >> Midi.sendSysex) model (fun _ -> SaveSuccess) (fun ex -> SaveError ex.Message)
-  | SaveSuccess -> { model with ErrorMessage = None }, Cmd.none
-  | SaveError e -> { model with ErrorMessage = Some e }, Cmd.none
-  | MidiSuccess a -> 
-    printfn "MIDIAccess: %A" a
-    { model with MidiEnabled = true 
-                 MidiErrorMessage = None
-                 MidiAccess = Some a }, Cmd.none
-  | MidiError e ->
-    let msg = if e.Message.Contains("is not a function")
-              then "WebMidi is currently only supported in Chrome!"
-              else e.Message
+  | SliderComplete -> model, Cmd.ofMsg SendSysex
+  | SaveSuccess -> { model with ErrorMessage = None }, success "Successfully saved"
+  | SendSuccess -> { model with ErrorMessage = None }, success "Sysex data successfully sent"
+  | SendError e -> { model with ErrorMessage = Some e }, error e
+  | MidiSuccess midiAccess -> 
+    let result = { model with MidiEnabled = true
+                              MidiErrorMessage = None
+                              MidiAccess = Some midiAccess }
 
+    let outputs : JS.Map<string, obj> = !!midiAccess?outputs
+    match outputs.size with
+    | 0. -> { result with MidiErrorMessage = Some "No outputs found" }, Cmd.batch [ (success "MIDI connected")
+                                                                                    (warning "No outputs found") ]
+    | _ ->
+      let mutable out : obj option = None
+      outputs.forEach (fun o k e -> match out with | None -> out <- Some o | _ -> ())
+      { result with SelectedMIDIOutput = out }, (success "MIDI connected")
+    
+  | MidiError _ ->
     { model with MidiEnabled = false
-                 MidiErrorMessage = Some msg
-                 MidiAccess = None }, Cmd.none
-  
+                 MidiErrorMessage = Some "WebMidi is currently only supported in Chrome!"
+                 MidiAccess = None }, (error "WebMidi is currently only supported in Chrome!")
+  | MidiMessage m -> { model with MidiMessages = (m :: model.MidiMessages) |> List.truncate 5 }, Cmd.none
+  | MidiOutputChanged o -> { model with SelectedMIDIOutput = Some o }, Cmd.none
+  | MidiChannelChanged c -> { model with SelectedMIDIChannel = c }, Cmd.none
+  | SendSysex -> 
+    match model.SelectedMIDIOutput with
+    | None -> model, Cmd.ofMsg (MidiMessage (Error, "No Output selected!"))
+    | Some o -> 
+      let data = sysexData model
+      match validateSysexData data with
+      | Some msg -> model, error msg
+      | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send o) model (fun _ -> SaveSuccess) (fun ex -> SendError ex.Message)
+      
 open Client.Bindings.Slider
 open Fable.Import.React
 
@@ -251,7 +292,7 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
   div [ ClassName ("card mt-2") ] [
     div [ ClassName ("card-header" + cardClass) ] [ 
       label [ ClassName "custom-control custom-checkbox" ] [
-        input [ Type "checkbox" 
+        input [ P.Type "checkbox" 
                 ClassName "custom-control-input"
                 Checked model.Enabled
                 OnChange (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
@@ -326,31 +367,71 @@ let view model dispatch =
       ]
     ]
 
-  div [ ClassName "container-fluid"] [
-    yield div [ ClassName "row mt-2" ] [
+  div [ P.ClassName "container-fluid"] [
+    yield div [ P.ClassName "row mt-2" ] [
       card "Setup" [ 
-        div [ ClassName "row" ] [ 
+        div [ P.ClassName "row" ] [ 
           card "Midi device setup" [
             match model.MidiErrorMessage with
             | Some m -> yield str m
             | _ -> ()
 
-            yield str (sprintf "%A" model.MidiAccess)
+            match model.MidiAccess with
+            | None -> () 
+            | Some midiAccess ->
+              yield div [ P.ClassName "form-group" ] [
+                label [ P.ClassName "col-form-label" ] [ str "MIDI input device" ] 
+                select [ P.ClassName "form-control"
+                         P.Value (model.SelectedMIDIOutput |> Option.map (fun o -> !! o?id) |> Option.defaultValue "") 
+                         P.OnChange (fun (ev:React.FormEvent) -> 
+                                      let id: string = !! ev.target?value
+                                      let outputs : JS.Map<string, obj> = (!! model.MidiAccess?outputs)
+                                      let o = outputs.get id
+                                      dispatch (MidiOutputChanged o)) ] [
+                  for k, o in (!! midiAccess?outputs) do
+                    yield option [ P.Value k ] [ str (!! o?name) ]
+                ]
+              ]
+
+
+              yield div [ P.ClassName "form-group" ] [
+                label [ P.ClassName "col-form-label" ] [ str "MIDI channel" ]
+                select [ P.ClassName "form-control"
+                         P.Value (string model.SelectedMIDIChannel)
+                         P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
+                  for i in 1..16 do
+                    yield option [ i |> string |> Key ] [ i |> string |> str ] ] ]
           ]
-          card "Save / Load / Share" []
+
+          card "Save / Load / Share" [
+            button [ P.ClassName "btn btn-primary" 
+                     P.Type "button" 
+                     P.OnClick (fun _ -> dispatch SendSysex)] [ str "Send" ]
+          ]
+          card "Midi messages" [
+            for p, msg in model.MidiMessages do
+              let alertClass = match p with
+                               | Info -> "alert-info"      
+                               | Success -> "alert-success"      
+                               | Warning -> "alert-warning"
+                               | Error -> "alert-danger"
+              yield div [ P.ClassName ("alert " + alertClass) ] [
+                str msg
+              ]
+          ]
         ]
       ]
     ]
 
     if model.MidiEnabled then
-      yield div [ ClassName "row mt-2" ] [
+      yield div [ P.ClassName "row mt-2" ] [
         card "Global voice controls" [
-          div [ ClassName "row" ] [ 
+          div [ P.ClassName "row" ] [ 
             card "Operator settings" [
               mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
               mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
-              div [ ClassName "form-group" ] [
-                label [ ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
+              div [ P.ClassName "form-group" ] [
+                label [ P.ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
                 br []
                 S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
                 S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
@@ -387,7 +468,7 @@ let view model dispatch =
               div [ ClassName "form-group" ] [
                 label [ ClassName "col-form-label" ] [ str "Patch name" ]
                 input [ ClassName "form-control"
-                        Type "text"
+                        P.Type "text"
                         P.Value model.Patch.PatchName
                         P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
               ]
@@ -407,6 +488,10 @@ let view model dispatch =
 open Elmish.React
 open Elmish.Debug
 
+#if DEBUG
+open Elmish.HMR
+#endif
+
 // App
 Program.mkProgram init update view
 #if DEBUG
@@ -414,7 +499,8 @@ Program.mkProgram init update view
 |> Program.withHMR
 #endif
 |> Program.withReact "elmish-app"
+
 #if DEBUG
-|> Program.withDebugger
+// |> Program.withDebugger
 #endif
 |> Program.run

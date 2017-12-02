@@ -50,28 +50,28 @@ type Operator =
   static member detune = (fun o -> o.Detune), (fun value o -> { o with Detune = value })
 
 let initOperator() =
-  { Enabled = false
-    EGRate1 = 0uy
+  { Enabled = true
+    EGRate1 = 80uy
     EGRate2 = 0uy
     EGRate3 = 0uy
-    EGRate4 = 0uy
-    EGLevel1 = 0uy
+    EGRate4 = 80uy
+    EGLevel1 = 99uy
     EGLevel2 = 0uy
     EGLevel3 = 0uy
     EGLevel4 = 0uy
-    LevelScaleBreakpoint = 0uy
+    LevelScaleBreakpoint = 50uy
     LevelScaleLeftDepth = 0uy
     LevelScaleRightDepth = 0uy
     LevelScaleLeftCurve = 0uy
     LevelScaleRightCurve = 0uy
     OscillatorRateScale = 0uy
     Detune = 0uy
-    FrequencyCoarse = 0uy
+    FrequencyCoarse = 2uy
     FrequencyFine = 0uy
     OscillatorMode = 0uy
     AmpModSense = 0uy
     KeyVelocitySense = 0uy
-    OperatorOutputLevel = 0uy }
+    OperatorOutputLevel = 99uy }
 
 type Patch = 
     { Algorithm: byte
@@ -171,18 +171,18 @@ let algorithms = [
 ]
 
 let initPatch () =
-  { Algorithm = 0uy
+  { Algorithm = 31uy
     Feedback = 0uy
     OscillatorKeySync = 0uy
-    Transpose = 0uy
-    PitchRate1 = 0uy
-    PitchRate2 = 0uy
-    PitchRate3 = 0uy
-    PitchRate4 = 0uy
-    PitchLevel1 = 0uy
-    PitchLevel2 = 0uy
-    PitchLevel3 = 0uy
-    PitchLevel4 = 0uy
+    Transpose = 24uy
+    PitchRate1 = 50uy
+    PitchRate2 = 50uy
+    PitchRate3 = 50uy
+    PitchRate4 = 50uy
+    PitchLevel1 = 50uy
+    PitchLevel2 = 50uy
+    PitchLevel3 = 50uy
+    PitchLevel4 = 50uy
     LFOSpeed = 0uy
     LFOWaveShape = 0uy
     LFOPitchModDepth = 0uy
@@ -190,17 +190,17 @@ let initPatch () =
     LFODelay = 0uy
     LFOKeySync = 0uy
     PitchModSensitivity = 0uy
-    PatchName = "Init"
+    PatchName = "synthmata"
     Operator1 = initOperator ()
-    Operator2 = initOperator ()
-    Operator3 = initOperator ()
-    Operator4 = initOperator ()
-    Operator5 = initOperator ()
-    Operator6 = initOperator () }
+    Operator2 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy }
+    Operator3 = { initOperator () with EGRate4 = 79uy; OperatorOutputLevel = 92uy }
+    Operator4 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy }
+    Operator5 = { initOperator () with OperatorOutputLevel = 92uy }
+    Operator6 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy } }
 let sysexHeader : byte list = 
     [ 0xf0uy // Status byte - start sysex
       0x43uy // ID # (i=67; Yamaha)
-      0x10uy // Sub-status (s=1) & channel number (n=0; ch 1)
+      0x00uy // Sub-status (s=0) & channel number (n=0; ch 1)
       0x00uy // format number (g=0; 1 voice)
       0x01uy // byte count MS byte
       0x1Buy // byte count LS byte (b=155; 1 voice)
@@ -231,7 +231,14 @@ let operatorSysex operatorModel =
     operatorModel.FrequencyFine
     operatorModel.Detune ]
 
-let toSysexMessage patch =
+let calcChecksum (data: byte array) =
+  let sum = data
+            |> Array.skip 6
+            |> Array.take 155
+            |> Array.sum
+  ((~~~(sum &&& 0xFFuy)) + 1uy) &&& 0x7Fuy
+
+let toSysexMessage patch : byte list =
 
   let operatorBits = 
     let o1 = if patch.Operator1.Enabled then 0b00100000uy else 0b00000000uy
@@ -241,7 +248,7 @@ let toSysexMessage patch =
     let o5 = if patch.Operator5.Enabled then 0b00000010uy else 0b00000000uy
     let o6 = if patch.Operator6.Enabled then 0b00000001uy else 0b00000000uy
     
-    [ o1 ||| o2 ||| o3 ||| o4 ||| o5 ||| o6 ]
+    [ 0b01000000uy ||| o1 ||| o2 ||| o3 ||| o4 ||| o5 ||| o6 ]
 
   let voiceName = 
     (patch.PatchName.PadRight(10, ' ').ToCharArray ())
@@ -249,34 +256,56 @@ let toSysexMessage patch =
     |> List.map byte
     |> List.take 10
 
-  sysexHeader
-  |> List.append (operatorSysex patch.Operator6)
-  |> List.append (operatorSysex patch.Operator5)
-  |> List.append (operatorSysex patch.Operator4)
-  |> List.append (operatorSysex patch.Operator3)
-  |> List.append (operatorSysex patch.Operator2)
-  |> List.append (operatorSysex patch.Operator1)
-  |> List.append [ patch.PitchRate1
-                   patch.PitchRate2
-                   patch.PitchRate3
-                   patch.PitchRate4
-                   patch.PitchLevel1
-                   patch.PitchLevel2
-                   patch.PitchLevel3
-                   patch.PitchLevel4
-                   patch.Algorithm - 1uy
-                   patch.Feedback
-                   patch.OscillatorKeySync
-                   patch.LFOSpeed
-                   patch.LFODelay
-                   patch.LFOPitchModDepth
-                   patch.LFOAmpModDepth
-                   patch.LFOKeySync
-                   patch.LFOWaveShape
-                   patch.PitchModSensitivity
-                   patch.Transpose ]
-   |> List.append voiceName
-   |> List.append operatorBits
-   |> List.append sysexEnd
-   |> List.rev
-   |> List.toArray
+  let result =
+    List.concat [
+      sysexHeader
+      operatorSysex patch.Operator6
+      operatorSysex patch.Operator5
+      operatorSysex patch.Operator4
+      operatorSysex patch.Operator3
+      operatorSysex patch.Operator2
+      operatorSysex patch.Operator1
+      [ patch.PitchRate1
+        patch.PitchRate2
+        patch.PitchRate3
+        patch.PitchRate4
+        patch.PitchLevel1
+        patch.PitchLevel2
+        patch.PitchLevel3
+        patch.PitchLevel4
+        patch.Algorithm - 1uy
+        patch.Feedback
+        patch.OscillatorKeySync
+        patch.LFOSpeed
+        patch.LFODelay
+        patch.LFOPitchModDepth
+        patch.LFOAmpModDepth
+        patch.LFOKeySync
+        patch.LFOWaveShape
+        patch.PitchModSensitivity
+        patch.Transpose ]
+      voiceName
+      operatorBits ]
+
+  List.append result [ calcChecksum (result |> List.toArray)
+                       0xF7uy ]
+
+
+let validateSysexData (data: byte array) : string option =
+  if data.Length <> 164 then
+    Some "wrong length"
+  elif data.[0] <> 0xF0uy then
+    Some "doesn't start with sysex byte"
+  elif data.[1] <> 0x43uy then
+    Some "not a yamaha sysex"
+  elif data.[163] <> 0xf7uy then
+    Some "doesn't end with EOX"
+  elif (data.[2] &&& 0x70uy) <> 0x00uy then
+    Some "sub status is not correct"
+  elif data.[3] <> 0x00uy then
+    Some "format isn't voice"
+  elif (data.[4] <> 0x01uy || data.[5] <> 0x1Buy) then
+    Some "length indicator is not correct"
+  elif (calcChecksum data <> data.[162]) then
+    Some "checksum failed"
+  else None
