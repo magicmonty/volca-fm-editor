@@ -22,3 +22,11 @@
     left:50%;
     transform:translate3d(-50%,-50%,0)
 }
+
+.rangeslider, .rangeslider .rangeslider__fill {
+    box-shadow: none !important;
+}
+
+.rangeslider {
+    margin: 8px 0 !important;
+}

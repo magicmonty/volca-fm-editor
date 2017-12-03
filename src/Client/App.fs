@@ -302,12 +302,11 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
       
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
-    R.label [ P.ClassName "col-form-label" ] [ R.str description ]
+    R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str (sprintf "%s (%s)" description (format (int value))) ]
     slider [ Min min
              Max max
              Value (int value)
              Format format
-             HandleLabel (format (int value))
              OnChange (byte >> event >> dispatch)
              OnChangeComplete onComplete ] 
   ]
@@ -381,7 +380,7 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
           mkSlider99 "Frequency Fine" model.FrequencyFine FrequencyFineChanged
 
           R.div [ P.ClassName "form-group" ] [
-            R.label [ P.ClassName "col-form-label" ] [ R.str "Oscillator mode" ]
+            R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Oscillator mode" ]
             R.br []
             S.radioInline "Ratio" "0" (model.OscillatorMode = 0uy) (fun _ -> dispatch (OscillatorModeChanged 0uy))
             S.radioInline "Fixed" "1" (model.OscillatorMode = 1uy) (fun _ -> dispatch (OscillatorModeChanged 1uy))
@@ -445,18 +444,24 @@ let view model dispatch =
           ]
 
           card "Save / Load / Share" [
-            R.div [ P.ClassName "btn-group" ] [
-              R.button [ P.ClassName "btn btn-primary" 
-                         P.Type "button" 
-                         P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
-              R.button [ P.ClassName "btn btn-primary" 
-                         P.Type "button" 
-                         P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]              
+            R.div [ P.ClassName "form-group" ] [
+              R.div [ P.ClassName "btn-group" ] [
+                R.button [ P.ClassName "btn btn-primary" 
+                           P.Type "button" 
+                           P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
+                R.button [ P.ClassName "btn btn-primary" 
+                           P.Type "button" 
+                           P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]              
+              ]
             ]
                         
-            R.input [ P.Type "file"
-                      P.Value ""
-                      P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
+            R.div [ P.ClassName "form-group" ] [
+              R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
+              R.input [ P.Type "file"
+                        P.ClassName "form-control-file"
+                        P.Value ""
+                        P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
+            ]
           ]
           card "Midi messages" [
             for msg in model.MidiMessages do
@@ -474,7 +479,7 @@ let view model dispatch =
               mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
               mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
               R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label" ] [ R.str "Oscillator Key Sync" ]
+                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Oscillator Key Sync" ]
                 R.br []
                 S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
                 S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
@@ -500,7 +505,7 @@ let view model dispatch =
               mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
               mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
               R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label" ] [ R.str "LFO Key Sync" ]
+                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "LFO Key Sync" ]
                 R.br []
                 S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
                 S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
@@ -509,8 +514,8 @@ let view model dispatch =
             ]
             card "Patch settings" [
               R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label" ] [ R.str "Patch name" ]
-                R.input [ P.ClassName "form-control"
+                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Patch name" ]
+                R.input [ P.ClassName "form-control form-control-sm"
                           P.Type "text"
                           P.Value model.Patch.PatchName
                           P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
