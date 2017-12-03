@@ -3,8 +3,6 @@ module Midi
 open Fable.Core
 open Fable.Import.JS
 open Fable.PowerPack
-open Fable.Option
-open Fable.Core.JsInterop
 open Fable.Import
 
 type MIDIOptions =
@@ -42,32 +40,30 @@ type IMIDIPort =
     abstract State: MIDIPortDeviceState with get
     [<Emit("$0.connection")>]
     abstract Connection: MIDIPortConnectionState with get
-    [<Emit("$0.OnStateChange")>]
+    [<Emit("$0.onstatechange")>]
     abstract OnStateChange: obj with get, set
-    [<Emit("$0.open()")>]
+    [<Emit("$0.open")>]
     abstract Open: (unit -> Promise<IMIDIPort>)
-    [<Emit("$0.close()")>]
+    [<Emit("$0.close")>]
     abstract Close: (unit -> Promise<IMIDIPort>)
 
 type IMIDIMessageEvent = obj
-
-type IMIDIConnectionEvent = obj
 
 type IMIDIInput =
     inherit IMIDIPort
     [<Emit("$0.onmidimessage")>]
     abstract OnMidiMessage: obj with get
 
-type IMIDIInputMap = (string*IMIDIInput) list
+type IMIDIInputMap = JS.Map<string, IMIDIInput>
 
 type IMIDIOutput =
     inherit IMIDIPort
-    [<Emit("$0.send($1)")>]
-    abstract Send: (byte array -> unit)
-    [<Emit("$0.clear($1)")>]
+    [<Emit("$0.send")>]
+    abstract Send: (uint8 array -> unit)
+    [<Emit("$0.clear")>]
     abstract Clear: (unit -> unit)
 
-type IMIDIOutputMap = (string*IMIDIOutput) list
+type IMIDIOutputMap = JS.Map<string, IMIDIOutput>
 
 type IMIDIAccess =
     [<Emit("$0.inputs")>]
@@ -79,27 +75,35 @@ type IMIDIAccess =
     [<Emit("$0.sysexEnabled")>]
     abstract SysexEnabled: bool with get, set
 
+type IMIDIConnectionEvent = 
+    [<Emit("$0.port")>]
+    abstract Port: IMIDIPort with get
+    [<Emit("$0.target")>]
+    abstract Target: IMIDIAccess with get
+
 module internal Intern =
 
     [<Emit("navigator.requestMIDIAccess($0)")>]
-    let requestMIDIAccess options : Promise<obj> = jsNative
+    let requestMIDIAccess options : Promise<IMIDIAccess> = jsNative
 
 module P = Fable.PowerPack.Promise
 
+module Map =
+    let toList (m: JS.Map<'a,'b>): ('a*'b) list =
+        let mutable result : ('a*'b) list = []
+        m.forEach (fun b a _ -> result <- (a, b) :: result)
+        result |> List.ofSeq
 
 [<RequireQualifiedAccess>]
 module MIDI =
-    [<Emit("navigator.requestMIDIAccess($2)")>]
-    let requestMIDIAccess options : Promise<obj> = jsNative
-
     let requestAccess (options: MIDIOptions list) =
         promise {
-            let! midiAccess = Intern.requestMIDIAccess (keyValueList CaseRules.LowerFirst options)
+            let! midiAccess = Intern.requestMIDIAccess (JsInterop.keyValueList CaseRules.LowerFirst options)
             return midiAccess
         }
 
-    let send (output: obj) (data : uint8 array) =
-        promise {            
-            !! output?send(data)
+    let send (output: IMIDIOutput) (data : uint8 array) =
+        promise {
+            output.Send data
         }
 

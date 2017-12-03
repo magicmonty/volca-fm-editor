@@ -1,7 +1,5 @@
 module VolcaFM
 
-open Aether
-
 type Operator =
   { Enabled : bool
     EGRate1 : byte
@@ -190,10 +188,10 @@ let initPatch () =
     LFODelay = 0uy
     LFOKeySync = 0uy
     PitchModSensitivity = 0uy
-    PatchName = "synthmata"
+    PatchName = "Init"
     Operator1 = initOperator ()
     Operator2 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy }
-    Operator3 = { initOperator () with EGRate4 = 79uy; OperatorOutputLevel = 92uy }
+    Operator3 = { initOperator () with OperatorOutputLevel = 92uy }
     Operator4 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy }
     Operator5 = { initOperator () with OperatorOutputLevel = 92uy }
     Operator6 = { initOperator () with FrequencyCoarse = 1uy; OperatorOutputLevel = 92uy } }

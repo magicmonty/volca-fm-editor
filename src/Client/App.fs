@@ -2,28 +2,25 @@ module Client.App
 
 open Aether
 open Aether.Operators
-open Fable.Core
 open Fable.Core.JsInterop
-open Fable.Helpers.React
-open Fable.Helpers.React.Props
-
 open Fable.Import
+
 open Elmish
 open Elmish.React
 
+open Bindings.Slider
 open VolcaFM
 open Midi
-open System
-open System.Runtime.Serialization
 
-JsInterop.importSideEffects "whatwg-fetch"
-JsInterop.importSideEffects "babel-polyfill"
+importSideEffects "whatwg-fetch"
+importSideEffects "babel-polyfill"
 
-module P = Fable.Helpers.React.Props
 module S = Client.Style
+module R = Fable.Helpers.React
+module P = Fable.Helpers.React.Props
 
 module String = 
-  let isNotEmpty v = not (String.IsNullOrEmpty v)
+  let isNotEmpty v = not (System.String.IsNullOrEmpty v)
 
 type MessagePriority =
   | Info
@@ -43,9 +40,9 @@ type Model = { MidiEnabled : bool
                Operator6Type : OperatorType
                ErrorMessage: string option
                MidiErrorMessage: string option
-               MidiAccess: obj option
+               MidiAccess: IMIDIAccess option
                MidiMessages : Alert list
-               SelectedMIDIOutput : obj option
+               SelectedMIDIOutput : IMIDIOutput option
                SelectedMIDIChannel : byte }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
@@ -105,15 +102,16 @@ type Msg =
   | Operator4Msg of OperatorMsg
   | Operator5Msg of OperatorMsg
   | Operator6Msg of OperatorMsg
-  | SaveSuccess
   | SendError of string
   | SendSuccess
-  | MidiSuccess of obj
+  | MidiSuccess of IMIDIAccess
+  | MidiStateChange of IMIDIAccess
   | MidiError of exn
   | MidiMessage of Alert
-  | MidiOutputChanged of obj
+  | MidiOutputChanged of IMIDIOutput
   | MidiChannelChanged of byte
   | SendSysex
+  | InitPatch
 
 let updateOperatorTypes model =
   let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
@@ -173,6 +171,9 @@ let updateOperator msg model op: Model =
   | OperatorOutputLevelChanged v -> model |> Optic.set (operator >-> Operator.operatorOutputLevel) v
   | OperatorSliderComplete -> model
   
+let onStateChange (ev: IMIDIConnectionEvent) =
+  Browser.console.log ev 
+
 let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   let patch = Model.patch
   let success msg = Cmd.ofMsg (MidiMessage (Success, msg))
@@ -213,22 +214,20 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
   | SliderComplete -> model, Cmd.ofMsg SendSysex
-  | SaveSuccess -> { model with ErrorMessage = None }, success "Successfully saved"
-  | SendSuccess -> { model with ErrorMessage = None }, success "Sysex data successfully sent"
+  | SendSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SendError e -> { model with ErrorMessage = Some e }, error e
   | MidiSuccess midiAccess -> 
+    midiAccess?onstatechange <- onStateChange
+    model, Cmd.ofMsg (MidiStateChange midiAccess)
+  | MidiStateChange midiAccess -> 
     let result = { model with MidiEnabled = true
                               MidiErrorMessage = None
                               MidiAccess = Some midiAccess }
 
-    let outputs : JS.Map<string, obj> = !!midiAccess?outputs
-    match outputs.size with
+    match midiAccess.Outputs.size with
     | 0. -> { result with MidiErrorMessage = Some "No outputs found" }, Cmd.batch [ (success "MIDI connected")
                                                                                     (warning "No outputs found") ]
-    | _ ->
-      let mutable out : obj option = None
-      outputs.forEach (fun o k e -> match out with | None -> out <- Some o | _ -> ())
-      { result with SelectedMIDIOutput = out }, (success "MIDI connected")
+    | _ -> { result with SelectedMIDIOutput = midiAccess.Outputs.values().next().value }, (success "MIDI connected")
     
   | MidiError _ ->
     { model with MidiEnabled = false
@@ -237,6 +236,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | MidiMessage m -> { model with MidiMessages = (m :: model.MidiMessages) |> List.truncate 5 }, Cmd.none
   | MidiOutputChanged o -> { model with SelectedMIDIOutput = Some o }, Cmd.none
   | MidiChannelChanged c -> { model with SelectedMIDIChannel = c }, Cmd.none
+  | InitPatch -> { model with Patch = VolcaFM.initPatch () }, Cmd.ofMsg SendSysex
   | SendSysex -> 
     match model.SelectedMIDIOutput with
     | None -> model, Cmd.ofMsg (MidiMessage (Error, "No Output selected!"))
@@ -244,14 +244,11 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
       let data = sysexData model
       match validateSysexData data with
       | Some msg -> model, error msg
-      | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send o) model (fun _ -> SaveSuccess) (fun ex -> SendError ex.Message)
+      | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send o) model (fun _ -> SendSuccess) (fun ex -> SendError ex.Message)
       
-open Client.Bindings.Slider
-open Fable.Import.React
-
 let mkSlider min max format dispatch onComplete description (value: byte) event =
-  div [ ClassName "form-group slider custom-labels"] [
-    label [ ClassName "col-form-label" ] [ str description ]    
+  R.div [ P.ClassName "form-group slider custom-labels"] [
+    R.label [ P.ClassName "col-form-label" ] [ R.str description ]
     slider [ Min min
              Max max
              Value (int value)
@@ -262,15 +259,15 @@ let mkSlider min max format dispatch onComplete description (value: byte) event 
   ]
 
 let card title content =
-  div [ ClassName "col" ] [
-    div [ ClassName "card" ] [
-      div [ ClassName "card-header" ] [ strong [] [ str title ] ]
-      div [ ClassName "card-body" ] content
+  R.div [ P.ClassName "col" ] [
+    R.div [ P.ClassName "card" ] [
+      R.div [ P.ClassName "card-header" ] [ R.strong [] [ R.str title ] ]
+      R.div [ P.ClassName "card-body" ] content
     ]
   ]
 
 /// Constructs the view for the application given the model.
-let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) : ReactElement =
+let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) : React.ReactElement =
   let operatorSliderComplete () = dispatch OperatorSliderComplete
   let mkSlider99 = mkSlider 0 99 string dispatch operatorSliderComplete
   let mkSlider3 = mkSlider 0 3 string dispatch operatorSliderComplete
@@ -282,28 +279,28 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
                  | 3 -> "LIN"
                  | _ -> "?"
 
-    mkSlider 0 4 format dispatch operatorSliderComplete
+    mkSlider 0 3 format dispatch operatorSliderComplete
     
   let mkSlider7 = mkSlider 0 7 string dispatch operatorSliderComplete
 
   let bodyClassName = if model.Enabled then " show" else ""
   let cardClass = if operatorType = Carrier then " text-white bg-success" else " text-white bg-info"
 
-  div [ ClassName ("card mt-2") ] [
-    div [ ClassName ("card-header" + cardClass) ] [ 
-      label [ ClassName "custom-control custom-checkbox" ] [
-        input [ P.Type "checkbox" 
-                ClassName "custom-control-input"
-                Checked model.Enabled
-                OnChange (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
-        span [ ClassName "custom-control-indicator" ] []
-        strong [ ClassName "custom-control-description" ] [ str (sprintf "%s (%A)" title operatorType) ]
+  R.div [ P.ClassName ("card mt-2") ] [
+    R.div [ P.ClassName ("card-header" + cardClass) ] [ 
+      R.label [ P.ClassName "custom-control custom-checkbox" ] [
+        R.input [ P.Type "checkbox" 
+                  P.ClassName "custom-control-input"
+                  P.Checked model.Enabled
+                  P.OnChange (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
+        R.span [ P.ClassName "custom-control-indicator" ] []
+        R.strong [ P.ClassName "custom-control-description" ] [ R.str (sprintf "%s (%A)" title operatorType) ]
       ]
     ]
 
-    div [ ClassName ("card-body collapse" + bodyClassName) ] [
+    R.div [ P.ClassName ("card-body collapse" + bodyClassName) ] [
 
-      div [ ClassName "row" ] [
+      R.div [ P.ClassName "row" ] [
         card  "Envelope rates" [
           mkSlider99 "EG Rate 1" model.EGRate1 EGRate1Changed
           mkSlider99 "EG Rate 2" model.EGRate2 EGRate2Changed
@@ -329,9 +326,9 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
           mkSlider 0 31 string dispatch operatorSliderComplete "Frequency Coarse" model.FrequencyCoarse FrequencyCoarseChanged
           mkSlider99 "Frequency Fine" model.FrequencyFine FrequencyFineChanged
 
-          div [ ClassName "form-group" ] [
-            label [ ClassName "col-form-label" ] [ str "Oscillator mode" ]
-            br []
+          R.div [ P.ClassName "form-group" ] [
+            R.label [ P.ClassName "col-form-label" ] [ R.str "Oscillator mode" ]
+            R.br []
             S.radioInline "Ratio" "0" (model.OscillatorMode = 0uy) (fun _ -> dispatch (OscillatorModeChanged 0uy))
             S.radioInline "Fixed" "1" (model.OscillatorMode = 1uy) (fun _ -> dispatch (OscillatorModeChanged 1uy))
           ]
@@ -361,52 +358,50 @@ let view model dispatch =
   let formatAlgorithm = ((+) 1) >> string
 
   let operator title opType opModel opMsg =
-    div [ ClassName "row" ] [ 
-      div [ ClassName "col" ] [
+    R.div [ P.ClassName "row" ] [ 
+      R.div [ P.ClassName "col" ] [
         viewOperator opModel opType title (opMsg >> dispatch)
       ]
     ]
 
-  div [ P.ClassName "container-fluid"] [
-    yield div [ P.ClassName "row mt-2" ] [
+  R.div [ P.ClassName "container-fluid"] [
+    yield R.div [ P.ClassName "row mt-2" ] [
       card "Setup" [ 
-        div [ P.ClassName "row" ] [ 
+        R.div [ P.ClassName "row" ] [ 
           card "Midi device setup" [
             match model.MidiErrorMessage with
-            | Some m -> yield str m
+            | Some m -> yield R.str m
             | _ -> ()
 
             match model.MidiAccess with
             | None -> () 
             | Some midiAccess ->
-              yield div [ P.ClassName "form-group" ] [
-                label [ P.ClassName "col-form-label" ] [ str "MIDI input device" ] 
-                select [ P.ClassName "form-control"
-                         P.Value (model.SelectedMIDIOutput |> Option.map (fun o -> !! o?id) |> Option.defaultValue "") 
-                         P.OnChange (fun (ev:React.FormEvent) -> 
-                                      let id: string = !! ev.target?value
-                                      let outputs : JS.Map<string, obj> = (!! model.MidiAccess?outputs)
-                                      let o = outputs.get id
-                                      dispatch (MidiOutputChanged o)) ] [
-                  for k, o in (!! midiAccess?outputs) do
-                    yield option [ P.Value k ] [ str (!! o?name) ]
+
+              yield R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName "col-form-label" ] [ R.str "MIDI input device" ] 
+                R.select [ P.ClassName "form-control"
+                           P.Value (model.SelectedMIDIOutput |> Option.map (fun o -> !! o?id) |> Option.defaultValue "") 
+                           P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (midiAccess.Outputs.get (!! ev.target?value)))) ] [
+                  
+                  for k, o in (midiAccess.Outputs |> Map.toList) do
+                    yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
                 ]
               ]
 
 
-              yield div [ P.ClassName "form-group" ] [
-                label [ P.ClassName "col-form-label" ] [ str "MIDI channel" ]
-                select [ P.ClassName "form-control"
-                         P.Value (string model.SelectedMIDIChannel)
-                         P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
+              yield R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName "col-form-label" ] [ R.str "MIDI channel" ]
+                R.select [ P.ClassName "form-control"
+                           P.Value (string model.SelectedMIDIChannel)
+                           P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
                   for i in 1..16 do
-                    yield option [ i |> string |> Key ] [ i |> string |> str ] ] ]
+                    yield R.option [ i |> string |> P.Key ] [ i |> string |> R.str ] ] ]
           ]
 
           card "Save / Load / Share" [
-            button [ P.ClassName "btn btn-primary" 
-                     P.Type "button" 
-                     P.OnClick (fun _ -> dispatch SendSysex)] [ str "Send" ]
+            R.button [ P.ClassName "btn btn-primary" 
+                       P.Type "button" 
+                       P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
           ]
           card "Midi messages" [
             for p, msg in model.MidiMessages do
@@ -415,8 +410,8 @@ let view model dispatch =
                                | Success -> "alert-success"      
                                | Warning -> "alert-warning"
                                | Error -> "alert-danger"
-              yield div [ P.ClassName ("alert " + alertClass) ] [
-                str msg
+              yield R.div [ P.ClassName ("alert " + alertClass) ] [
+                R.str msg
               ]
           ]
         ]
@@ -424,15 +419,15 @@ let view model dispatch =
     ]
 
     if model.MidiEnabled then
-      yield div [ P.ClassName "row mt-2" ] [
+      yield R.div [ P.ClassName "row mt-2" ] [
         card "Global voice controls" [
-          div [ P.ClassName "row" ] [ 
+          R.div [ P.ClassName "row" ] [ 
             card "Operator settings" [
               mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
               mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
-              div [ P.ClassName "form-group" ] [
-                label [ P.ClassName "col-form-label" ] [ str "Oscillator Key Sync" ]
-                br []
+              R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName "col-form-label" ] [ R.str "Oscillator Key Sync" ]
+                R.br []
                 S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
                 S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
               ]
@@ -456,21 +451,21 @@ let view model dispatch =
               mkSlider99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged
               mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
               mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
-              div [ ClassName "form-group" ] [
-                label [ ClassName "col-form-label" ] [ str "LFO Key Sync" ]
-                br []
+              R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName "col-form-label" ] [ R.str "LFO Key Sync" ]
+                R.br []
                 S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
                 S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
               ]
               mkSlider 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged
             ]
             card "Patch settings" [
-              div [ ClassName "form-group" ] [
-                label [ ClassName "col-form-label" ] [ str "Patch name" ]
-                input [ ClassName "form-control"
-                        P.Type "text"
-                        P.Value model.Patch.PatchName
-                        P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
+              R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName "col-form-label" ] [ R.str "Patch name" ]
+                R.input [ P.ClassName "form-control"
+                          P.Type "text"
+                          P.Value model.Patch.PatchName
+                          P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
               ]
             ]
           ]
@@ -485,11 +480,10 @@ let view model dispatch =
       yield operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg
   ]
 
-open Elmish.React
-open Elmish.Debug
 
 #if DEBUG
 open Elmish.HMR
+open Elmish.Debug
 #endif
 
 // App
@@ -501,6 +495,6 @@ Program.mkProgram init update view
 |> Program.withReact "elmish-app"
 
 #if DEBUG
-// |> Program.withDebugger
+|> Program.withDebugger
 #endif
 |> Program.run

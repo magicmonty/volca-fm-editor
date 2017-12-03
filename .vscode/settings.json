@@ -23,6 +23,7 @@
 	"src/Client/public/":true,
 	"src/**/bin":true,
 	"src/**/obj":true,
-	"src/Client/out":true
+	"src/Client/out":true,
+	"src/Client/node_modules":true
 	}
 }
