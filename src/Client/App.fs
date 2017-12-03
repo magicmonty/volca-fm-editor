@@ -11,6 +11,8 @@ open Elmish.React
 open Bindings.Slider
 open VolcaFM
 open Midi
+open Fable.Core.Exceptions
+open Fable.Core
 
 importSideEffects "whatwg-fetch"
 importSideEffects "babel-polyfill"
@@ -21,14 +23,6 @@ module P = Fable.Helpers.React.Props
 
 module String = 
   let isNotEmpty v = not (System.String.IsNullOrEmpty v)
-
-type MessagePriority =
-  | Info
-  | Success
-  | Warning
-  | Error
-
-type Alert = MessagePriority*string
 
 type Model = { MidiEnabled : bool
                Patch : Patch
@@ -41,7 +35,7 @@ type Model = { MidiEnabled : bool
                ErrorMessage: string option
                MidiErrorMessage: string option
                MidiAccess: IMIDIAccess option
-               MidiMessages : Alert list
+               MidiMessages : S.Alert list
                SelectedMIDIOutput : IMIDIOutput option
                SelectedMIDIChannel : byte }
 
@@ -107,11 +101,37 @@ type Msg =
   | MidiSuccess of IMIDIAccess
   | MidiStateChange of IMIDIAccess
   | MidiError of exn
-  | MidiMessage of Alert
+  | MidiMessage of S.Alert
   | MidiOutputChanged of IMIDIOutput
   | MidiChannelChanged of byte
   | SendSysex
   | InitPatch
+  | SavePatch
+  | LoadPatch
+  | PatchLoaded of byte list
+
+
+let makeBlob data =
+  let parts : ResizeArray<obj> = new ResizeArray<obj>()
+  parts.Add(data)
+  Browser.Blob.Create(blobParts = parts)
+
+let clickTemporaryLink url fileName =
+  let a = Browser.document.createElement "a"
+  a?href <- url
+  a?download <- fileName
+  Browser.document.body.appendChild a |> ignore
+  a?click() |> ignore
+  Browser.document.body.removeChild(a) |> ignore
+
+let savePatch (patch: VolcaFM.Patch) =
+  let file = patch |> toSysexMessage |> List.toArray |> makeBlob
+  let url = Browser.window.URL.createObjectURL file
+  let fileName = sprintf "%s_patch.syx" patch.PatchName
+  
+  clickTemporaryLink url fileName
+  Browser.window.URL.revokeObjectURL url
+  
 
 let updateOperatorTypes model =
   let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
@@ -176,9 +196,9 @@ let onStateChange (ev: IMIDIConnectionEvent) =
 
 let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   let patch = Model.patch
-  let success msg = Cmd.ofMsg (MidiMessage (Success, msg))
-  let error msg = Cmd.ofMsg (MidiMessage (Error, msg))
-  let warning  msg = Cmd.ofMsg (MidiMessage (Warning, msg))
+  let success msg = Cmd.ofMsg (MidiMessage (S.Success, msg))
+  let error msg = Cmd.ofMsg (MidiMessage (S.Error, msg))
+  let warning  msg = Cmd.ofMsg (MidiMessage (S.Warning, msg))
 
   match msg with
   | AlgorithmChanged v -> (model |> Optic.set (patch >-> Patch.algorithm) v |> updateOperatorTypes), Cmd.none
@@ -236,15 +256,18 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | MidiMessage m -> { model with MidiMessages = (m :: model.MidiMessages) |> List.truncate 5 }, Cmd.none
   | MidiOutputChanged o -> { model with SelectedMIDIOutput = Some o }, Cmd.none
   | MidiChannelChanged c -> { model with SelectedMIDIChannel = c }, Cmd.none
-  | InitPatch -> { model with Patch = VolcaFM.initPatch () }, Cmd.ofMsg SendSysex
+  | InitPatch -> { model with Patch = initPatch () }, Cmd.ofMsg SendSysex
+  | SavePatch -> model, Cmd.ofFunc savePatch model.Patch (fun _ -> MidiMessage (S.Success, "saved.")) (fun ex -> SendError ex.Message)
   | SendSysex -> 
     match model.SelectedMIDIOutput with
-    | None -> model, Cmd.ofMsg (MidiMessage (Error, "No Output selected!"))
+    | None -> model, error "No Output selected!"
     | Some o -> 
       let data = sysexData model
       match validateSysexData data with
       | Some msg -> model, error msg
       | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send o) model (fun _ -> SendSuccess) (fun ex -> SendError ex.Message)
+  | LoadPatch -> model, Cmd.none
+  | PatchLoaded data -> model, Cmd.none
       
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
@@ -377,42 +400,35 @@ let view model dispatch =
             | None -> () 
             | Some midiAccess ->
 
-              yield R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label" ] [ R.str "MIDI input device" ] 
-                R.select [ P.ClassName "form-control"
-                           P.Value (model.SelectedMIDIOutput |> Option.map (fun o -> !! o?id) |> Option.defaultValue "") 
-                           P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (midiAccess.Outputs.get (!! ev.target?value)))) ] [
-                  
+              yield S.select "MIDI input device" [ P.Value (model.SelectedMIDIOutput |> Option.map (fun o -> !! o?id) |> Option.defaultValue "")
+                                                   P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (midiAccess.Outputs.get (!! ev.target?value)))) ] [
                   for k, o in (midiAccess.Outputs |> Map.toList) do
                     yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
-                ]
               ]
 
-
-              yield R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label" ] [ R.str "MIDI channel" ]
-                R.select [ P.ClassName "form-control"
-                           P.Value (string model.SelectedMIDIChannel)
-                           P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
+              yield S.select "MIDI channel" [ P.Value (string model.SelectedMIDIChannel)
+                                              P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
                   for i in 1..16 do
-                    yield R.option [ i |> string |> P.Key ] [ i |> string |> R.str ] ] ]
+                    yield R.option [ i |> string |> P.Key ] [ i |> string |> R.str ]
+              ]
           ]
 
           card "Save / Load / Share" [
-            R.button [ P.ClassName "btn btn-primary" 
-                       P.Type "button" 
-                       P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
+            R.div [ P.ClassName "btn-group" ] [
+              R.button [ P.ClassName "btn btn-primary" 
+                         P.Type "button" 
+                         P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
+              R.button [ P.ClassName "btn btn-primary" 
+                         P.Type "button" 
+                         P.OnClick (fun _ -> dispatch LoadPatch)] [ R.str "Load Patch" ]
+              R.button [ P.ClassName "btn btn-primary" 
+                         P.Type "button" 
+                         P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
+            ]
           ]
           card "Midi messages" [
-            for p, msg in model.MidiMessages do
-              let alertClass = match p with
-                               | Info -> "alert-info"      
-                               | Success -> "alert-success"      
-                               | Warning -> "alert-warning"
-                               | Error -> "alert-danger"
-              yield R.div [ P.ClassName ("alert " + alertClass) ] [
-                R.str msg
-              ]
+            for msg in model.MidiMessages do
+              yield S.alert msg
           ]
         ]
       ]
@@ -483,7 +499,7 @@ let view model dispatch =
 
 #if DEBUG
 open Elmish.HMR
-open Elmish.Debug
+// open Elmish.Debug
 #endif
 
 // App
@@ -495,6 +511,6 @@ Program.mkProgram init update view
 |> Program.withReact "elmish-app"
 
 #if DEBUG
-|> Program.withDebugger
+// |> Program.withDebugger
 #endif
 |> Program.run
