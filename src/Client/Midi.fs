@@ -94,6 +94,13 @@ module Map =
         m.forEach (fun b a _ -> result <- (a, b) :: result)
         result |> List.ofSeq
 
+module ArrayBuffer =
+    let toArray (m: ArrayBuffer) : byte array =
+        let c = JS.Uint8ClampedArray.Create(m)
+        let mutable result : byte list = []
+        c.forEach (fun a _ _ -> result <- (byte a) :: result)
+        result |> List.rev |> List.toArray
+
 [<RequireQualifiedAccess>]
 module MIDI =
     let requestAccess (options: MIDIOptions list) =

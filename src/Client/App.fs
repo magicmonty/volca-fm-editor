@@ -11,8 +11,6 @@ open Elmish.React
 open Bindings.Slider
 open VolcaFM
 open Midi
-open Fable.Core.Exceptions
-open Fable.Core
 
 importSideEffects "whatwg-fetch"
 importSideEffects "babel-polyfill"
@@ -37,7 +35,8 @@ type Model = { MidiEnabled : bool
                MidiAccess: IMIDIAccess option
                MidiMessages : S.Alert list
                SelectedMIDIOutput : IMIDIOutput option
-               SelectedMIDIChannel : byte }
+               SelectedMIDIChannel : byte
+               FileToLoad : Browser.Blob option }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
   
@@ -107,8 +106,9 @@ type Msg =
   | SendSysex
   | InitPatch
   | SavePatch
+  | FileToLoadChanged of Browser.Blob list
   | LoadPatch
-  | PatchLoaded of byte list
+  | PatchLoaded of Patch
 
 
 let makeBlob data =
@@ -132,6 +132,27 @@ let savePatch (patch: VolcaFM.Patch) =
   clickTemporaryLink url fileName
   Browser.window.URL.revokeObjectURL url
   
+open Fable.PowerPack
+
+let checkSysexFileLoad (theFile : Browser.Blob) =
+  JS.Promise.Create(fun resolve _ ->
+    let reader = Browser.FileReader.Create()
+    reader.onload <- 
+      (fun (e: Browser.Event) ->
+        let data : JS.ArrayBuffer = !! e.target?result
+        let content = data |> ArrayBuffer.toArray
+        let patch = match validateSysexData content with
+                    | None ->
+                      let p = loadPatch content
+                      match p with
+                      | Some p -> PatchLoaded p
+                      | _ -> MidiMessage (S.Error, "Could not load patch!")
+                    | Some msg -> MidiMessage (S.Error, msg)
+        resolve.Invoke(Fable.Core.U2.Case1 patch)
+        null)
+      
+    reader.readAsArrayBuffer theFile)
+
 
 let updateOperatorTypes model =
   let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
@@ -158,7 +179,8 @@ let init () : Model*Cmd<Msg> =
       MidiAccess = None
       MidiMessages = []
       SelectedMIDIOutput = None
-      SelectedMIDIChannel = 1uy }
+      SelectedMIDIChannel = 1uy 
+      FileToLoad = None }
     |> updateOperatorTypes
   
   m, (Cmd.ofPromise MIDI.requestAccess [ Sysex true ] MidiSuccess MidiError)
@@ -266,8 +288,17 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
       match validateSysexData data with
       | Some msg -> model, error msg
       | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send o) model (fun _ -> SendSuccess) (fun ex -> SendError ex.Message)
-  | LoadPatch -> model, Cmd.none
-  | PatchLoaded data -> model, Cmd.none
+  | FileToLoadChanged fileList -> 
+    if fileList.Length = 0 
+    then model, Cmd.none
+    else { model with FileToLoad = Some fileList.[0] }, Cmd.ofMsg LoadPatch
+  | LoadPatch -> 
+    match model.FileToLoad with
+    | Some blob -> 
+      model, Cmd.ofPromise checkSysexFileLoad blob id (fun ex -> SendError ex.Message)
+    | _ -> model, Cmd.none
+  | PatchLoaded patch -> { model with Patch = patch }, Cmd.batch [ Cmd.ofMsg SendSysex
+                                                                   success (sprintf "Loaded patch %s" patch.PatchName) ]
       
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
@@ -420,11 +451,12 @@ let view model dispatch =
                          P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
               R.button [ P.ClassName "btn btn-primary" 
                          P.Type "button" 
-                         P.OnClick (fun _ -> dispatch LoadPatch)] [ R.str "Load Patch" ]
-              R.button [ P.ClassName "btn btn-primary" 
-                         P.Type "button" 
-                         P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
+                         P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]              
             ]
+                        
+            R.input [ P.Type "file"
+                      P.Value ""
+                      P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
           ]
           card "Midi messages" [
             for msg in model.MidiMessages do
