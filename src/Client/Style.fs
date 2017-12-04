@@ -37,5 +37,5 @@ let radioInline title value isChecked (onClick: MouseEvent -> unit) =
 
 let select title props content = 
   R.div [ P.ClassName "form-group" ] [
-    R.label (List.append [ P.ClassName "col-form-label col-form-label-sm" ] props) [ R.str title ]
-    R.select [ P.ClassName "form-control form-control-sm" ] content ]
+    R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str title ]
+    R.select (List.append [ P.ClassName "form-control form-control-sm" ] props) content ]
