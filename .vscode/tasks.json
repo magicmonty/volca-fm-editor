@@ -4,13 +4,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "taskName": "Build ServerTests",
-            "command": "npm",
+            "taskName": "Build",
+            "command": "./build.sh",
             "type": "shell",
             "group": "build",
             "args": [
-                "run",
-                "buildServerTest"
+                "Build"
             ],
             "presentation": {
                 "reveal": "silent"
@@ -18,13 +17,25 @@
             "problemMatcher": []
         },
         {
-            "taskName": "Build Server",
-            "command": "npm",
+            "taskName": "Run DevServer",
+            "command": "./build.sh",
             "type": "shell",
             "group": "build",
             "args": [
-                "run",
-                "buildServer"
+                "Run"
+            ],
+            "presentation": {
+                "reveal": "silent"
+            },
+            "problemMatcher": []
+        },
+        {
+            "taskName": "Release",
+            "command": "./build.sh",
+            "type": "shell",
+            "group": "build",
+            "args": [
+                "Release"
             ],
             "presentation": {
                 "reveal": "silent"
