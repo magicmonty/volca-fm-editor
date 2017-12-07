@@ -13,6 +13,17 @@ open System
 open System.IO
 open Fake.Testing.Expecto
 
+// Git configuration (used for publishing documentation in gh-pages branch)
+// The profile where the project is posted
+let gitOwner = "magicmonty"
+let gitHome = "https://github.com/" + gitOwner
+
+// The name of the project on GitHub
+let gitProjectName = "volca-fm-editor"
+
+// The name of the GitHub repo subdirectory to publish slides to
+let gitSubDir = ""
+
 let project = "Volca FM Patch Editor"
 let summary = "Volca FM Patch Editor"
 let description = summary
@@ -208,7 +219,23 @@ Target "BundleClient" (fun _ ->
     "src/Client/index.html" |> CopyFile clientDir
 )
 
+Target "ReleaseClient" (fun _ ->
+    if gitOwner = "myGitUser" || gitProjectName = "MyProject" then
+        failwith "You need to specify the gitOwner and gitProjectName in build.fsx"
+    let tempDocsRoot = __SOURCE_DIRECTORY__ </> "temp/gh-pages"
+    let tempDocsDir = tempDocsRoot </> gitSubDir
+    CleanDir tempDocsRoot
+    Repository.cloneSingleBranch "" (gitHome + "/" + gitProjectName + ".git") "gh-pages" tempDocsRoot
+
+    fullclean tempDocsDir
+    CopyRecursive deployDir tempDocsDir true |> tracefn "%A"
+    StageAll tempDocsRoot
+    Git.Commit.Commit tempDocsRoot "Update generated client"
+    Branches.push tempDocsRoot
+)
+
 // -------------------------------------------------------------------------------------
+Target "Release" DoNothing
 Target "Build" DoNothing
 Target "All" DoNothing
 
@@ -224,6 +251,10 @@ Target "All" DoNothing
 
 "BuildClient"
   ==> "Build"
+
+"ReleaseClient"
+  ==> "BuildClient"
+  ==> "Release"
 
 "InstallClient"
   ==> "Run"
