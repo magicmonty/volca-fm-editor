@@ -440,6 +440,7 @@ let view model dispatch =
     ]
 
   R.div [ P.ClassName "container-fluid"] [
+    yield S.githubBanner
     yield R.div [ P.ClassName "row mt-2" ] [
       card "Setup" [ 
         R.div [ P.ClassName "row" ] [ 

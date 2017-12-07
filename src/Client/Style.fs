@@ -39,3 +39,17 @@ let select title props content =
   R.div [ P.ClassName "form-group" ] [
     R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str title ]
     R.select (List.append [ P.ClassName "form-control form-control-sm" ] props) content ]
+
+
+let githubBanner =
+  R.a [ P.Href "https://github.com/magicmonty/volca-fm-editor" ] [
+    R.img [ P.Style [ P.Position "absolute" 
+                      P.Top "0"
+                      P.Right "0" 
+                      P.Border "0"
+                      P.ZIndex 9999. ] 
+            P.Src "https://camo.githubusercontent.com/e7bbb0521b397edbd5fe43e7f760759336b5e05f/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677265656e5f3030373230302e706e67"
+            P.Alt "Fork me on GitHub"
+            P.Data ("canonical-src", "https://s3.amazonaws.com/github/ribbons/forkme_right_green_007200.png")
+            P.Target "_blank" ]
+    ]
