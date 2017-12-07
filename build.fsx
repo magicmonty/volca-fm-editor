@@ -16,7 +16,7 @@ open Fake.Testing.Expecto
 // Git configuration (used for publishing documentation in gh-pages branch)
 // The profile where the project is posted
 let gitOwner = "magicmonty"
-let gitHome = "https://github.com/" + gitOwner
+let gitHome = "git@github.com:" + gitOwner
 
 // The name of the project on GitHub
 let gitProjectName = "volca-fm-editor"
@@ -206,7 +206,7 @@ Target "BundleClient" (fun _ ->
     "src/Client/index.html" |> CopyFile clientDir
 )
 
-Target "ReleaseClient" (fun _ ->
+Target "DeployToGithub" (fun _ ->
     if gitOwner = "myGitUser" || gitProjectName = "MyProject" then
         failwith "You need to specify the gitOwner and gitProjectName in build.fsx"
     let tempDocsRoot = __SOURCE_DIRECTORY__ </> "temp/gh-pages"
@@ -223,6 +223,7 @@ Target "ReleaseClient" (fun _ ->
 
 // -------------------------------------------------------------------------------------
 Target "Build" DoNothing
+Target "Release" DoNothing
 Target "All" DoNothing
 
 "Clean"
@@ -233,7 +234,8 @@ Target "All" DoNothing
   ==> "BundleClient"
   ==> "All"
   ==> "PrepareRelease"
-  ==> "ReleaseClient"
+  ==> "DeployToGithub"
+  ==> "Release"
 
 "BuildClient"
   ==> "Build"
