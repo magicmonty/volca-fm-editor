@@ -8,7 +8,6 @@ open System.Net
 open Suave.Filters
 open Suave.Operators
 open Suave.RequestErrors
-open ServerCode
 
 /// Start the web server and connect to database
 let start clientPath port =

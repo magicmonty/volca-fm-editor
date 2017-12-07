@@ -235,7 +235,6 @@ Target "ReleaseClient" (fun _ ->
 )
 
 // -------------------------------------------------------------------------------------
-Target "Release" DoNothing
 Target "Build" DoNothing
 Target "All" DoNothing
 
@@ -248,13 +247,11 @@ Target "All" DoNothing
   ==> "BundleClient"
   ==> "All"
   ==> "PrepareRelease"
+  ==> "ReleaseClient"
+  ==> "All"
 
 "BuildClient"
   ==> "Build"
-
-"ReleaseClient"
-  ==> "BuildClient"
-  ==> "Release"
 
 "InstallClient"
   ==> "Run"
