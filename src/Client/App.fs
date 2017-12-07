@@ -10,7 +10,7 @@ open Elmish.React
 
 open Bindings.Slider
 open VolcaFM
-open Midi
+open WebMIDI
 
 importSideEffects "whatwg-fetch"
 importSideEffects "babel-polyfill"
@@ -257,12 +257,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | SendSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SendError e -> { model with ErrorMessage = Some e }, error e
   | MidiSuccess midiAccess -> 
-    let midiAccessSub dispatch = 
-      let onStateChange (ev: IMIDIConnectionEvent) =
-        dispatch (MidiStateChange ev.Target)
-      midiAccess?onstatechange <- onStateChange
-    
-    model, Cmd.batch [ Cmd.ofSub midiAccessSub
+    model, Cmd.batch [ Cmd.ofSub (fun dispatch -> midiAccess.OnStateChange <- (fun _ -> dispatch (MidiStateChange midiAccess)))
                        success "MIDI connected"
                        Cmd.ofMsg (MidiStateChange midiAccess) ]
   | MidiError _ ->

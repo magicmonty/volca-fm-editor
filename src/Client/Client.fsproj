@@ -7,7 +7,7 @@
     <Compile Include="bindings/Slider.fs" />
     <Compile Include="ReleaseNotes.fs" />
     <Compile Include="VolcaFM.fs" />
-    <Compile Include="Midi.fs" />
+    <Compile Include="WebMIDI.fs" />
     <Compile Include="Style.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>

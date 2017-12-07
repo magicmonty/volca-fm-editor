@@ -1,4 +1,4 @@
-module Midi
+module WebMIDI
 
 open Fable.Core
 open Fable.Import.JS
@@ -7,7 +7,6 @@ open Fable.Import
 
 type MIDIOptions =
     | Sysex of bool
-    | Software of bool
 
 [<StringEnum>]
 type MIDIPortType =
@@ -40,26 +39,38 @@ type IMIDIPort =
     abstract State: MIDIPortDeviceState with get
     [<Emit("$0.connection")>]
     abstract Connection: MIDIPortConnectionState with get
-    [<Emit("$0.onstatechange")>]
-    abstract OnStateChange: obj with get, set
+    [<Emit("$0.onstatechange=$1")>]
+    abstract OnStateChange: (IMIDIConnectionEvent -> unit) with set
     [<Emit("$0.open")>]
     abstract Open: (unit -> Promise<IMIDIPort>)
     [<Emit("$0.close")>]
     abstract Close: (unit -> Promise<IMIDIPort>)
 
-type IMIDIMessageEvent = obj
+and IMIDIConnectionEvent = 
+    inherit Browser.EventType
+    [<Emit("$0.port")>]
+    abstract Port: IMIDIPort with get
+
+type IMIDIMessageEvent =
+    inherit Browser.EventType
+    [<Emit("$0.receivedTime")>]
+    abstract member ReceivedTime: double with get
+    [<Emit("$0.data")>]
+    abstract member Data: byte array with get
 
 type IMIDIInput =
     inherit IMIDIPort
-    [<Emit("$0.onmidimessage")>]
-    abstract OnMidiMessage: obj with get
+    [<Emit("$0.onmidimessage=$1")>]
+    abstract OnMidiMessage: (IMIDIMessageEvent -> unit) with set
 
 type IMIDIInputMap = JS.Map<string, IMIDIInput>
 
 type IMIDIOutput =
     inherit IMIDIPort
     [<Emit("$0.send")>]
-    abstract Send: (uint8 array -> unit)
+    abstract Send: (byte array -> unit)
+    [<Emit("$0.send($2, $1)")>]
+    abstract SendAt: (float -> byte array -> unit)
     [<Emit("$0.clear")>]
     abstract Clear: (unit -> unit)
 
@@ -70,21 +81,15 @@ type IMIDIAccess =
     abstract Inputs: IMIDIInputMap with get
     [<Emit("$0.outputs")>]
     abstract Outputs: IMIDIOutputMap with get
-    [<Emit("$0.onstatechange")>]
-    abstract OnStateChange: obj with get, set
+    [<Emit("$0.onstatechange=$1")>]
+    abstract OnStateChange: (IMIDIConnectionEvent -> unit) with set
     [<Emit("$0.sysexEnabled")>]
     abstract SysexEnabled: bool with get, set
-
-type IMIDIConnectionEvent = 
-    [<Emit("$0.port")>]
-    abstract Port: IMIDIPort with get
-    [<Emit("$0.target")>]
-    abstract Target: IMIDIAccess with get
 
 module internal Intern =
 
     [<Emit("navigator.requestMIDIAccess($0)")>]
-    let requestMIDIAccess options : Promise<IMIDIAccess> = jsNative
+    let requestAccess (options: obj) : Promise<IMIDIAccess> = jsNative
 
 module P = Fable.PowerPack.Promise
 
@@ -104,12 +109,9 @@ module ArrayBuffer =
 [<RequireQualifiedAccess>]
 module MIDI =
     let requestAccess (options: MIDIOptions list) =
-        promise {
-            let! midiAccess = Intern.requestMIDIAccess (JsInterop.keyValueList CaseRules.LowerFirst options)
-            return midiAccess
-        }
+        Intern.requestAccess (JsInterop.keyValueList CaseRules.LowerFirst options)
 
-    let send (output: IMIDIOutput) (data : uint8 array) =
+    let send (output: IMIDIOutput) (data : byte array) =
         promise {
             output.Send data
         }
