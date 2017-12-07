@@ -10,6 +10,7 @@ let Notes = """
 * better handling of MIDI events
 * VS Code tasks for build, run and release
 * GitHub banner
+* Shareable link
 
 ### 0.0.1 - 2017-12-06
 * Initial release
