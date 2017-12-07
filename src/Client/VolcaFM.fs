@@ -382,3 +382,11 @@ let loadPatch (data: byte array) =
       Operator4 = getOperator 2 (isEnabled 0b00000100uy)
       Operator5 = getOperator 1 (isEnabled 0b00000010uy)
       Operator6 = getOperator 0 (isEnabled 0b00000001uy) } |> Some
+
+[<RequireQualifiedAccess>]
+module Patch =
+  let encode patch : string =
+    patch |> toSysexMessage |> List.toArray |> Base64.fromByteArray
+
+  let decode s : Patch option =
+    s |> Base64.toByteArray |> loadPatch

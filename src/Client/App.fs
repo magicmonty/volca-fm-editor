@@ -36,7 +36,8 @@ type Model = { MidiEnabled : bool
                MidiOutputs : (string*IMIDIOutput) list
                SelectedMIDIOutput : string option
                SelectedMIDIChannel : byte
-               FileToLoad : Browser.Blob option }
+               FileToLoad : Browser.Blob option
+               PermaLink : string }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
   
@@ -162,9 +163,21 @@ let updateOperatorTypes model =
                Operator6Type = op6 }
 
 let init () : Model*Cmd<Msg> =
+  let search = match Browser.window.location.hash with
+               | "" -> Browser.window.location.search
+               | h -> h.Substring 1
+
+  let patch = 
+    match search with
+    | s when s.StartsWith "?patch=" && s.Length > 7 && not (s.Contains "&") -> 
+      s.Substring 7
+      |> Patch.decode 
+      |> Option.defaultValue (initPatch ())
+    | _ -> initPatch ()
+
   let m =
     { MidiEnabled = false
-      Patch = initPatch ()
+      Patch = patch
       Operator1Type = Carrier
       Operator2Type = Carrier
       Operator3Type = Carrier
@@ -177,7 +190,8 @@ let init () : Model*Cmd<Msg> =
       MidiOutputs = []
       SelectedMIDIOutput = None
       SelectedMIDIChannel = 1uy 
-      FileToLoad = None }
+      FileToLoad = None
+      PermaLink = patch |> Patch.encode }
     |> updateOperatorTypes
   
   m, (Cmd.ofPromise MIDI.requestAccess [ Sysex true ] MidiSuccess MidiError)
@@ -240,7 +254,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | LFODelayChanged v -> (model |> Optic.set (patch >-> Patch.lFODelay) v), Cmd.none
   | LFOKeySyncChanged v -> (model |> Optic.set (patch >-> Patch.lFOKeySync) v), Cmd.none
   | PitchModSensitivityChanged v -> (model |> Optic.set (patch >-> Patch.pitchModSensitivity) v), Cmd.none
-  | PatchNameChanged v -> (model |> Optic.set (patch >-> Patch.patchName) v), Cmd.none
+  | PatchNameChanged v -> (model |> Optic.set (patch >-> Patch.patchName) v), Cmd.ofMsg SliderComplete
   | Operator1Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator1Msg msg -> (updateOperator msg model Patch.operator1), Cmd.none
   | Operator2Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
@@ -253,7 +267,10 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | Operator5Msg msg -> (updateOperator msg model Patch.operator5), Cmd.none
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
-  | SliderComplete -> model, Cmd.ofMsg SendSysex
+  | SliderComplete -> 
+    let permalink = model.Patch |> Patch.encode
+    Browser.window.location.hash <- ("?patch=" + permalink)
+    { model with PermaLink = permalink }, Cmd.ofMsg SendSysex
   | SendSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SendError e -> { model with ErrorMessage = Some e }, error e
   | MidiSuccess midiAccess -> 
@@ -297,7 +314,8 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | MidiMessage m -> { model with MidiMessages = (m :: model.MidiMessages) |> List.truncate 5 }, Cmd.none
   | MidiOutputChanged id -> { model with SelectedMIDIOutput = Some id }, Cmd.none
   | MidiChannelChanged c -> { model with SelectedMIDIChannel = c }, Cmd.none
-  | InitPatch -> { model with Patch = initPatch () }, Cmd.ofMsg SendSysex
+  | InitPatch -> { model with Patch = initPatch ()
+                              PermaLink = initPatch () |> Patch.encode }, Cmd.ofMsg SendSysex
   | SavePatch -> model, Cmd.ofFunc savePatch model.Patch (fun _ -> MidiMessage (S.Success, "saved.")) (fun ex -> SendError ex.Message)
   | SendSysex -> 
     match model.SelectedMIDIOutput with
@@ -319,8 +337,9 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
     | Some blob -> 
       model, Cmd.ofPromise checkSysexFileLoad blob id (fun ex -> SendError ex.Message)
     | _ -> model, Cmd.none
-  | PatchLoaded patch -> { model with Patch = patch }, Cmd.batch [ Cmd.ofMsg SendSysex
-                                                                   success (sprintf "Loaded patch %s" patch.PatchName) ]
+  | PatchLoaded patch -> { model with Patch = patch
+                                      PermaLink = patch |> Patch.encode }, Cmd.batch [ Cmd.ofMsg SendSysex
+                                                                                       success (sprintf "Loaded patch %s" patch.PatchName) ]
       
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
@@ -483,6 +502,8 @@ let view model dispatch =
                         P.Value ""
                         P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
             ]
+
+            R.a [ P.Href (sprintf "#?patch=%s" model.PermaLink) ] [ R.str "Permalink"]
           ]
           card "Midi messages" [
             for msg in model.MidiMessages do
