@@ -29,7 +29,6 @@ let summary = "Volca FM Patch Editor"
 let description = summary
 let configuration = "Release"
 let clientPath = "./src/Client" |> FullName
-let serverPath = "./src/Server/" |> FullName
 
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
@@ -123,11 +122,6 @@ Target "InstallDotNetCore" (fun _ ->
 // Build library & test project
 
 
-Target "BuildServer" (fun _ ->
-    runDotnet serverPath "build"
-)
-
-
 Target "InstallClient" (fun _ ->
     printfn "Node version:"
     run nodeTool "--version" __SOURCE_DIRECTORY__
@@ -198,14 +192,7 @@ Target "PrepareRelease" (fun _ ->
 )
 
 Target "BundleClient" (fun _ ->
-    let result =
-        ExecProcess (fun info ->
-            info.FileName <- dotnetExePath
-            info.WorkingDirectory <- serverPath
-            info.Arguments <- "publish -c Release -o \"" + FullName deployDir + "\"") TimeSpan.MaxValue
-    if result <> 0 then failwith "Publish failed"
-
-    let clientDir = deployDir </> "client"
+    let clientDir = deployDir
     let publicDir = clientDir </> "public"
     let jsDir = clientDir </> "js"
     let cssDir = clientDir </> "css"
@@ -242,13 +229,11 @@ Target "All" DoNothing
   ==> "InstallDotNetCore"
   ==> "InstallClient"
   ==> "SetReleaseNotes"
-  ==> "BuildServer"
   ==> "BuildClient"
   ==> "BundleClient"
   ==> "All"
   ==> "PrepareRelease"
   ==> "ReleaseClient"
-  ==> "All"
 
 "BuildClient"
   ==> "Build"
