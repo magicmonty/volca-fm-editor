@@ -1,10 +1,13 @@
 module internal ReleaseNotes
 
-let Version = "0.0.2"
+let Version = "0.0.3"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.0.3 - 2017-12-08
+* Fix accidentally selection on slider movement
+
 ### 0.0.2 - 2017-12-07
 * Cleanup, Renaming
 * better handling of MIDI events
