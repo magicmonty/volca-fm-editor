@@ -6,6 +6,9 @@
         {
             "taskName": "Build",
             "command": "./build.sh",
+            "windows": {
+                "command": ".\\build.cmd"
+            },
             "type": "shell",
             "group": "build",
             "args": [
@@ -19,6 +22,9 @@
         {
             "taskName": "Run DevServer",
             "command": "./build.sh",
+            "windows": {
+                "command": ".\\build.cmd"
+            },
             "type": "shell",
             "group": "build",
             "args": [
@@ -32,6 +38,9 @@
         {
             "taskName": "Release",
             "command": "./build.sh",
+            "windows": {
+                "command": ".\\build.cmd"
+            },
             "type": "shell",
             "group": "build",
             "args": [
