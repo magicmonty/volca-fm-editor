@@ -46,3 +46,11 @@ input, textarea {
 .rangeslider {
     margin: 8px 0 !important;
 }
+
+.card {
+    margin-top: 10px;
+}
+
+.card-body {
+    padding-top: 0.5rem;
+}
