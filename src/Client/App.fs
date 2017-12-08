@@ -19,7 +19,7 @@ module S = Client.Style
 module R = Fable.Helpers.React
 module P = Fable.Helpers.React.Props
 
-module String = 
+module String =
   let isNotEmpty v = not (System.String.IsNullOrEmpty v)
 
 type Model = { MidiEnabled : bool
@@ -40,8 +40,8 @@ type Model = { MidiEnabled : bool
                PermaLink : string }
 
              static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
-  
-type OperatorMsg = 
+
+type OperatorMsg =
   | EnabledChanged of bool
   | EGRate1Changed of byte
   | EGRate2Changed of byte
@@ -128,14 +128,14 @@ let savePatch (patch: VolcaFM.Patch) =
   let file = patch |> toSysexMessage |> List.toArray |> makeBlob
   let url = Browser.window.URL.createObjectURL file
   let fileName = sprintf "%s_patch.syx" patch.PatchName
-  
+
   clickTemporaryLink url fileName
   Browser.window.URL.revokeObjectURL url
-  
+
 let checkSysexFileLoad (theFile : Browser.Blob) =
   JS.Promise.Create(fun resolve _ ->
     let reader = Browser.FileReader.Create()
-    reader.onload <- 
+    reader.onload <-
       (fun (e: Browser.Event) ->
         let data : JS.ArrayBuffer = !! e.target?result
         let content = data |> ArrayBuffer.toArray
@@ -148,13 +148,13 @@ let checkSysexFileLoad (theFile : Browser.Blob) =
                     | Some msg -> MidiMessage (S.Error, msg)
         resolve.Invoke(Fable.Core.U2.Case1 patch)
         null)
-      
+
     reader.readAsArrayBuffer theFile)
 
 
 let updateOperatorTypes model =
   let op1, op2, op3, op4, op5, op6 = algorithms.[int model.Patch.Algorithm]
-  
+
   { model with Operator1Type = op1
                Operator2Type = op2
                Operator3Type = op3
@@ -167,11 +167,11 @@ let init () : Model*Cmd<Msg> =
                | "" -> Browser.window.location.search
                | h -> h.Substring 1
 
-  let patch = 
+  let patch =
     match search with
-    | s when s.StartsWith "?patch=" && s.Length > 7 && not (s.Contains "&") -> 
+    | s when s.StartsWith "?patch=" && s.Length > 7 && not (s.Contains "&") ->
       s.Substring 7
-      |> Patch.decode 
+      |> Patch.decode
       |> Option.defaultValue (initPatch ())
     | _ -> initPatch ()
 
@@ -189,11 +189,11 @@ let init () : Model*Cmd<Msg> =
       MidiMessages = []
       MidiOutputs = []
       SelectedMIDIOutput = None
-      SelectedMIDIChannel = 1uy 
+      SelectedMIDIChannel = 1uy
       FileToLoad = None
       PermaLink = patch |> Patch.encode }
     |> updateOperatorTypes
-  
+
   m, (Cmd.ofPromise MIDI.requestAccess [ Sysex true ] MidiSuccess MidiError)
 
 let updateOperator msg model op: Model =
@@ -223,9 +223,9 @@ let updateOperator msg model op: Model =
   | KeyVelocitySenseChanged v -> model |> Optic.set (operator >-> Operator.keyVelocitySense) v
   | OperatorOutputLevelChanged v -> model |> Optic.set (operator >-> Operator.operatorOutputLevel) v
   | OperatorSliderComplete -> model
-  
+
 let onStateChange (ev: IMIDIConnectionEvent) =
-  Browser.console.log ev 
+  Browser.console.log ev
 
 let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   let patch = Model.patch
@@ -267,20 +267,20 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | Operator5Msg msg -> (updateOperator msg model Patch.operator5), Cmd.none
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
-  | SliderComplete -> 
+  | SliderComplete ->
     let permalink = model.Patch |> Patch.encode
     Browser.window.location.hash <- ("?patch=" + permalink)
     { model with PermaLink = permalink }, Cmd.ofMsg SendSysex
   | SendSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SendError e -> { model with ErrorMessage = Some e }, error e
-  | MidiSuccess midiAccess -> 
+  | MidiSuccess midiAccess ->
     model, Cmd.batch [ Cmd.ofSub (fun dispatch -> midiAccess.OnStateChange <- (fun _ -> dispatch (MidiStateChange midiAccess)))
                        success "MIDI connected"
                        Cmd.ofMsg (MidiStateChange midiAccess) ]
   | MidiError _ ->
     { model with MidiEnabled = false
                  MidiErrorMessage = Some "WebMidi is currently only supported in Chrome!" }, (error "WebMidi is currently only supported in Chrome!")
-  | MidiStateChange midiAccess -> 
+  | MidiStateChange midiAccess ->
     let outputs = midiAccess.Outputs |> Map.toList
 
     match outputs with
@@ -288,14 +288,14 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
                          MidiEnabled = false
                          SelectedMIDIOutput = None
                          MidiOutputs = [] }, Cmd.batch [ (warning "No outputs found") ]
-    | (id, _)::rest -> 
+    | (id, _)::rest ->
       match model.SelectedMIDIOutput with
       | None ->
         { model with SelectedMIDIOutput = Some id
                      MidiEnabled = true
                      MidiOutputs = outputs
                      MidiErrorMessage = None }, (info "New MIDI output found!")
-      | (Some oId) when (oId = id) || (rest |> List.exists (fun (key, _) -> oId = key)) -> 
+      | (Some oId) when (oId = id) || (rest |> List.exists (fun (key, _) -> oId = key)) ->
         let cmd = match model.MidiOutputs.Length, outputs.Length with
                   | o,n when o > n -> info "MIDI output removed"
                   | o,n when o < n -> info "New MIDI output found"
@@ -317,7 +317,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | InitPatch -> { model with Patch = initPatch ()
                               PermaLink = initPatch () |> Patch.encode }, Cmd.ofMsg SendSysex
   | SavePatch -> model, Cmd.ofFunc savePatch model.Patch (fun _ -> MidiMessage (S.Success, "saved.")) (fun ex -> SendError ex.Message)
-  | SendSysex -> 
+  | SendSysex ->
     match model.SelectedMIDIOutput with
     | None -> model, error "No Output selected!"
     | Some oId ->
@@ -328,19 +328,19 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
         match validateSysexData data with
         | Some msg -> model, error msg
         | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send output) model (fun _ -> SendSuccess) (fun ex -> SendError ex.Message)
-  | FileToLoadChanged fileList -> 
-    if fileList.Length = 0 
+  | FileToLoadChanged fileList ->
+    if fileList.Length = 0
     then model, Cmd.none
     else { model with FileToLoad = Some fileList.[0] }, Cmd.ofMsg LoadPatch
-  | LoadPatch -> 
+  | LoadPatch ->
     match model.FileToLoad with
-    | Some blob -> 
+    | Some blob ->
       model, Cmd.ofPromise checkSysexFileLoad blob id (fun ex -> SendError ex.Message)
     | _ -> model, Cmd.none
   | PatchLoaded patch -> { model with Patch = patch
                                       PermaLink = patch |> Patch.encode }, Cmd.batch [ Cmd.ofMsg SendSysex
                                                                                        success (sprintf "Loaded patch %s" patch.PatchName) ]
-      
+
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
     R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str (sprintf "%s (%s)" description (format (int value))) ]
@@ -349,7 +349,7 @@ let mkSlider min max format dispatch onComplete description (value: byte) event 
              Value (int value)
              Format format
              OnChange (byte >> event >> dispatch)
-             OnChangeComplete onComplete ] 
+             OnChangeComplete onComplete ]
   ]
 
 let card title content =
@@ -374,16 +374,16 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
                  | _ -> "?"
 
     mkSlider 0 3 format dispatch operatorSliderComplete
-    
+
   let mkSlider7 = mkSlider 0 7 string dispatch operatorSliderComplete
 
   let bodyClassName = if model.Enabled then " show" else ""
   let cardClass = if operatorType = Carrier then " text-white bg-success" else " text-white bg-info"
 
   R.div [ P.ClassName ("card mt-2") ] [
-    R.div [ P.ClassName ("card-header" + cardClass) ] [ 
+    R.div [ P.ClassName ("card-header" + cardClass) ] [
       R.label [ P.ClassName "custom-control custom-checkbox" ] [
-        R.input [ P.Type "checkbox" 
+        R.input [ P.Type "checkbox"
                   P.ClassName "custom-control-input"
                   P.Checked model.Enabled
                   P.OnChange (fun _ -> dispatch (EnabledChanged (not model.Enabled))) ]
@@ -452,7 +452,7 @@ let view model dispatch =
   let formatAlgorithm = ((+) 1) >> string
 
   let operator title opType opModel opMsg =
-    R.div [ P.ClassName "row" ] [ 
+    R.div [ P.ClassName "row" ] [
       R.div [ P.ClassName "col" ] [
         viewOperator opModel opType title (opMsg >> dispatch)
       ]
@@ -460,9 +460,13 @@ let view model dispatch =
 
   R.div [ P.ClassName "container-fluid"] [
     yield S.githubBanner
+    yield R.h1 [ ] [
+        R.str "Volca FM Patch editor "
+        R.span [ P.ClassName "badge badge-pill badge-secondary" ] [ R.str (sprintf "V%s" ReleaseNotes.Version) ]
+    ]
     yield R.div [ P.ClassName "row mt-2" ] [
-      card "Setup" [ 
-        R.div [ P.ClassName "row" ] [ 
+      card "Setup" [
+        R.div [ P.ClassName "row" ] [
           card "Midi device setup" [
             match model.MidiEnabled with
             | false ->
@@ -486,15 +490,15 @@ let view model dispatch =
           card "Save / Load / Share" [
             R.div [ P.ClassName "form-group" ] [
               R.div [ P.ClassName "btn-group" ] [
-                R.button [ P.ClassName "btn btn-primary" 
-                           P.Type "button" 
+                R.button [ P.ClassName "btn btn-primary"
+                           P.Type "button"
                            P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
-                R.button [ P.ClassName "btn btn-primary" 
-                           P.Type "button" 
-                           P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]              
+                R.button [ P.ClassName "btn btn-primary"
+                           P.Type "button"
+                           P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
               ]
             ]
-                        
+
             R.div [ P.ClassName "form-group" ] [
               R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
               R.input [ P.Type "file"
@@ -516,7 +520,7 @@ let view model dispatch =
     if model.MidiEnabled then
       yield R.div [ P.ClassName "row mt-2" ] [
         card "Global voice controls" [
-          R.div [ P.ClassName "row" ] [ 
+          R.div [ P.ClassName "row" ] [
             card "Operator settings" [
               mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
               mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
