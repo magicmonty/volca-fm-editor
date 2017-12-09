@@ -1,3 +1,6 @@
+### 0.0.6 - 2017-12-09
+* Limit patch name entry to 10 chars
+
 ### 0.0.5 - 2017-12-09
 * Code reorg
 * Moved WebMIDI stuff in own NuGet package

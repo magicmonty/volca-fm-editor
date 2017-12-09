@@ -248,7 +248,11 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | LFODelayChanged v -> (model |> Optic.set (patch >-> Patch.lFODelay) v), Cmd.none
   | LFOKeySyncChanged v -> (model |> Optic.set (patch >-> Patch.lFOKeySync) v), Cmd.none
   | PitchModSensitivityChanged v -> (model |> Optic.set (patch >-> Patch.pitchModSensitivity) v), Cmd.none
-  | PatchNameChanged v -> (model |> Optic.set (patch >-> Patch.patchName) v), Cmd.ofMsg SliderComplete
+  | PatchNameChanged v -> 
+      let patchName = match v with
+                      | v when v.Length > 10 -> v.Substring(0, 10)
+                      | _ -> v
+      (model |> Optic.set (patch >-> Patch.patchName) patchName), Cmd.ofMsg SliderComplete
   | Operator1Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator1Msg msg -> (updateOperator msg model Patch.operator1), Cmd.none
   | Operator2Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
