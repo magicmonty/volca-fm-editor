@@ -4,7 +4,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "taskName": "Build",
+            "label": "Build",
             "command": "./build.sh",
             "windows": {
                 "command": ".\\build.cmd"
@@ -20,7 +20,7 @@
             "problemMatcher": []
         },
         {
-            "taskName": "Run DevServer",
+            "label": "Run DevServer",
             "command": "./build.sh",
             "windows": {
                 "command": ".\\build.cmd"
@@ -36,7 +36,7 @@
             "problemMatcher": []
         },
         {
-            "taskName": "Release",
+            "label": "Release",
             "command": "./build.sh",
             "windows": {
                 "command": ".\\build.cmd"
@@ -52,9 +52,9 @@
             "problemMatcher": []
         },
         {
-            "taskName": "Open Browser",
+            "label": "Open Browser",
             "type": "shell",
-            "dependsOn": "Build Server",
+            "dependsOn": "Run DevServer",
             "windows": {
                 "command": "cmd.exe",
                 "args": [
@@ -77,7 +77,7 @@
             }
         },
         {
-            "taskName": "Start",
+            "label": "Start",
             "command": "npm",
             "type": "shell",
             "dependsOn": "Open Browser",

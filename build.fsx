@@ -28,7 +28,7 @@ let project = "Volca FM Patch Editor"
 let summary = "Volca FM Patch Editor"
 let description = summary
 let configuration = "Release"
-let clientPath = "./src/Client" |> FullName
+let clientPath = "./src" |> FullName
 
 open Newtonsoft.Json
 open Newtonsoft.Json.Linq
@@ -174,7 +174,7 @@ Target "SetReleaseNotes" (fun _ ->
             (sprintf "let IsPrerelease = %b" (release.SemVer.PreRelease <> None))
             ""
             "let Notes = \"\"\""] @ Array.toList releaseNotes @ ["\"\"\""]
-    File.WriteAllLines("src/Client/ReleaseNotes.fs",lines)
+    File.WriteAllLines("src/ReleaseNotes.fs",lines)
 )
 
 Target "PrepareRelease" (fun _ ->
@@ -198,12 +198,12 @@ Target "BundleClient" (fun _ ->
     let cssDir = clientDir </> "css"
     let imageDir = clientDir </> "Images"
 
-    !! "src/Client/public/**/*.*" |> CopyFiles publicDir
-    !! "src/Client/js/**/*.*" |> CopyFiles jsDir
-    !! "src/Client/css/**/*.*" |> CopyFiles cssDir
-    !! "src/Client/Images/**/*.*" |> CopyFiles imageDir
+    !! "src/public/**/*.*" |> CopyFiles publicDir
+    !! "src/js/**/*.*" |> CopyFiles jsDir
+    !! "src/css/**/*.*" |> CopyFiles cssDir
+    !! "src/Images/**/*.*" |> CopyFiles imageDir
 
-    "src/Client/index.html" |> CopyFile clientDir
+    "src/index.html" |> CopyFile clientDir
 )
 
 Target "DeployToGithub" (fun _ ->
