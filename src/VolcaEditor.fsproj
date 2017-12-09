@@ -4,11 +4,12 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="bindings/Slider.fs" />
     <Compile Include="ReleaseNotes.fs" />
+    <Compile Include="Slider.fs" />
     <Compile Include="Base64.fs" />
     <Compile Include="VolcaFM.fs" />
     <Compile Include="Style.fs" />
+    <Compile Include="State.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />

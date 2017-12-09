@@ -1,4 +1,4 @@
-module Client.Bindings.Slider
+module VolcaEditor.Slider
 
 open Fable.Core
 open Fable.Import
