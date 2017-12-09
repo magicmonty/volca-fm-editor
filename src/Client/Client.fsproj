@@ -8,7 +8,6 @@
     <Compile Include="ReleaseNotes.fs" />
     <Compile Include="Base64.fs" />
     <Compile Include="VolcaFM.fs" />
-    <Compile Include="WebMIDI.fs" />
     <Compile Include="Style.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>

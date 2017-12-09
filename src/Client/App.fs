@@ -10,7 +10,7 @@ open Elmish.React
 
 open Bindings.Slider
 open VolcaFM
-open WebMIDI
+open Fable.Import.WebMIDI
 
 importSideEffects "whatwg-fetch"
 importSideEffects "babel-polyfill"

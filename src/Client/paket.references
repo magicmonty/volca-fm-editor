@@ -6,3 +6,4 @@ Fable.Elmish.HMR
 Fable.Core
 dotnet-fable
 Fable.Aether
+Fable.Import.WebMIDI
