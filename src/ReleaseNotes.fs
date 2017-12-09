@@ -1,10 +1,14 @@
 module internal ReleaseNotes
 
-let Version = "0.0.4"
+let Version = "0.0.5"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.0.5 - 2017-12-09
+* Code reorg
+* Moved WebMIDI stuff in own NuGet package
+
 ### 0.0.4 - 2017-12-08
 * Fix Margins on cards for better responsive support
 * badge-pill
