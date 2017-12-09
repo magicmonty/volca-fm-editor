@@ -1,10 +1,14 @@
 module internal ReleaseNotes
 
-let Version = "0.0.5"
+let Version = "0.0.6"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.0.6 - 2017-12-09
+* Limit patch name entry to 10 chars
+* CSS tweaking
+
 ### 0.0.5 - 2017-12-09
 * Code reorg
 * Moved WebMIDI stuff in own NuGet package
