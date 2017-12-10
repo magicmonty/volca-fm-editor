@@ -1,10 +1,13 @@
 module internal ReleaseNotes
 
-let Version = "0.0.6"
+let Version = "0.0.7"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.0.7 - 2017-12-10
+* Possibility to receive patches from MIDI devices
+
 ### 0.0.6 - 2017-12-09
 * Limit patch name entry to 10 chars
 * CSS tweaking
