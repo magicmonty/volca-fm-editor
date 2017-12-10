@@ -289,26 +289,44 @@ let toSysexMessage patch : byte list =
                        0xF7uy ]
 
 let validateSysexData (data: byte array) : string option =
-  if data.Length <> 164 then
-    Some "wrong length"
-  elif data.[0] <> 0xF0uy then
-    Some "doesn't start with sysex byte"
-  elif data.[1] <> 0x43uy then
-    Some "not a yamaha sysex"
-  elif data.[163] <> 0xf7uy then
-    Some "doesn't end with EOX"
-  elif (data.[2] &&& 0x70uy) <> 0x00uy then
-    Some "sub status is not correct"
-  elif data.[3] <> 0x00uy then
-    Some "format isn't voice"
-  elif (data.[4] <> 0x01uy || data.[5] <> 0x1Buy) then
-    Some "length indicator is not correct"
-  elif (calcChecksum data <> data.[162]) then
-    Some "checksum failed"
-  else None
+  if data.Length = 163 then
+    if data.[0] <> 0xF0uy then
+      Some "doesn't start with sysex byte"
+    elif data.[1] <> 0x43uy then
+      Some "not a yamaha sysex"
+    elif data.[162] <> 0xf7uy then
+      Some "doesn't end with EOX"
+    elif (data.[2] &&& 0x70uy) <> 0x00uy then
+      Some "sub status is not correct"
+    elif data.[3] <> 0x00uy then
+      Some "format isn't voice"
+    elif (data.[4] <> 0x01uy || data.[5] <> 0x1Buy) then
+      Some "length indicator is not correct"
+    elif (calcChecksum data <> data.[161]) then
+      Some "checksum failed"
+    else None
+  else
+    if data.Length <> 164 then
+      Some "wrong length"
+    elif data.[0] <> 0xF0uy then
+      Some "doesn't start with sysex byte"
+    elif data.[1] <> 0x43uy then
+      Some "not a yamaha sysex"
+    elif data.[163] <> 0xf7uy then
+      Some "doesn't end with EOX"
+    elif (data.[2] &&& 0x70uy) <> 0x00uy then
+      Some "sub status is not correct"
+    elif data.[3] <> 0x00uy then
+      Some "format isn't voice"
+    elif (data.[4] <> 0x01uy || data.[5] <> 0x1Buy) then
+      Some "length indicator is not correct"
+    elif (calcChecksum data <> data.[162]) then
+      Some "checksum failed"
+    else None
 
 let loadPatch (data: byte array) =
-  
+  let hasEnabledByte = data.Length = 164
+
   let loadOperator isEnabled (opData: byte array) =
     { Enabled = isEnabled
       EGRate1 = opData.[0]
@@ -354,7 +372,7 @@ let loadPatch (data: byte array) =
       |> fun s -> s.Trim()
 
     let isEnabled mask =
-      globalData.[29] &&& mask <> 0uy
+      (not hasEnabledByte) || (globalData.[29] &&& mask <> 0uy)
 
     { PitchRate1 = globalData.[0]
       PitchRate2 = globalData.[1]

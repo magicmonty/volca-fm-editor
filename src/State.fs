@@ -8,6 +8,8 @@ open WebMIDI
 open Elmish
 open Slider
 open VolcaFM
+open Fable.Import.WebMIDI
+open Fable.Import.WebMIDI
 
 module S = Client.Style
 module R = Fable.Helpers.React
@@ -15,6 +17,8 @@ module P = Fable.Helpers.React.Props
 
 module String =
   let isNotEmpty v = not (System.String.IsNullOrEmpty v)
+
+let DoNothing _ = ()
 
 type Model = { MidiEnabled : bool
                Patch : Patch
@@ -29,6 +33,8 @@ type Model = { MidiEnabled : bool
                MidiMessages : S.Alert list
                MidiOutputs : (string*IMIDIOutput) list
                SelectedMIDIOutput : string option
+               MidiInputs : (string*IMIDIInput) list
+               SelectedMIDIInput : string option
                SelectedMIDIChannel : byte
                FileToLoad : Browser.Blob option
                PermaLink : string }
@@ -95,6 +101,7 @@ type Msg =
   | MidiError of exn
   | MidiMessage of S.Alert
   | MidiOutputChanged of string
+  | MidiInputChanged of string
   | MidiChannelChanged of byte
   | SendSysex
   | InitPatch
@@ -102,6 +109,7 @@ type Msg =
   | FileToLoadChanged of Browser.Blob list
   | LoadPatch
   | PatchLoaded of Patch
+  | PermalinkChanged
 
 let sysexData model = model.Patch |> toSysexMessage |> List.toArray
 
@@ -138,8 +146,8 @@ let checkSysexFileLoad (theFile : Browser.Blob) =
                       let p = loadPatch content
                       match p with
                       | Some p -> PatchLoaded p
-                      | _ -> MidiMessage (S.Error, "Could not load patch!")
-                    | Some msg -> MidiMessage (S.Error, msg)
+                      | _ -> MidiMessage (S.Error "Could not load patch!")
+                    | Some msg -> MidiMessage (S.Error msg)
         resolve.Invoke(Fable.Core.U2.Case1 patch)
         null)
 
@@ -183,6 +191,8 @@ let init () : Model*Cmd<Msg> =
       MidiMessages = []
       MidiOutputs = []
       SelectedMIDIOutput = None
+      MidiInputs = []
+      SelectedMIDIInput = None
       SelectedMIDIChannel = 1uy
       FileToLoad = None
       PermaLink = patch |> Patch.encode }
@@ -223,10 +233,10 @@ let onStateChange (ev: IMIDIConnectionEvent) =
 
 let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   let patch = Model.patch
-  let success msg = Cmd.ofMsg (MidiMessage (S.Success, msg))
-  let error msg = Cmd.ofMsg (MidiMessage (S.Error, msg))
-  let info msg = Cmd.ofMsg (MidiMessage (S.Info, msg))
-  let warning  msg = Cmd.ofMsg (MidiMessage (S.Warning, msg))
+  let success msg = Cmd.ofMsg (MidiMessage (S.Success msg))
+  let error msg = Cmd.ofMsg (MidiMessage (S.Error msg))
+  let info msg = Cmd.ofMsg (MidiMessage (S.Info msg))
+  let warning  msg = Cmd.ofMsg (MidiMessage (S.Warning msg))
 
   match msg with
   | AlgorithmChanged v -> (model |> Optic.set (patch >-> Patch.algorithm) v |> updateOperatorTypes), Cmd.none
@@ -266,55 +276,131 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
   | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
   | SliderComplete ->
-    let permalink = model.Patch |> Patch.encode
-    Browser.window.location.hash <- ("?patch=" + permalink)
-    { model with PermaLink = permalink }, Cmd.ofMsg SendSysex
+    model, Cmd.batch [ Cmd.ofMsg SendSysex
+                       Cmd.ofMsg PermalinkChanged ]
   | SendSuccess -> { model with ErrorMessage = None }, Cmd.none
   | SendError e -> { model with ErrorMessage = Some e }, error e
   | MidiSuccess midiAccess ->
-    model, Cmd.batch [ Cmd.ofSub (fun dispatch -> midiAccess.OnStateChange <- (fun _ -> dispatch (MidiStateChange midiAccess)))
+    let stateChangeSub dispatch =
+      let onStateChange _ =
+        dispatch (MidiStateChange midiAccess)
+      midiAccess.OnStateChange <- onStateChange
+
+    model, Cmd.batch [ Cmd.ofSub stateChangeSub
                        success "MIDI connected"
-                       Cmd.ofMsg (MidiStateChange midiAccess) ]
+                       Cmd.ofMsg (MidiStateChange midiAccess)
+                       Cmd.ofMsg PermalinkChanged ]
   | MidiError _ ->
     { model with MidiEnabled = false
                  MidiErrorMessage = Some "WebMidi is currently only supported in Chrome!" }, (error "WebMidi is currently only supported in Chrome!")
   | MidiStateChange midiAccess ->
-    let outputs = midiAccess.Outputs |> Map.toList
+    let getSelectedId map selected =
+      match map |> Map.toList with
+      | [] -> None
+      | (id, _)::rest -> 
+        match selected with
+        | (Some oId) when (oId = id) || (rest |> List.exists (fun (key, _) -> oId = key)) -> Some oId
+        | _ -> Some id
+    
+    let getNotificationMessage newList originalList selected originalSelected typeName =
+      match newList with
+      | [] -> 
+        true, (warning (sprintf "No %ss found" typeName) |> Some)
+      | os when os |> List.compareWith (fun (e1, _) (e2, _) -> (int e1) - (int e2)) originalList = 0 -> 
+        false, None
+      | os when os.Length > originalList.Length -> 
+        false, (info (sprintf "New MIDI %s found" typeName) |> Some)
+      | os when os.Length < originalList.Length -> 
+        false, (info (sprintf "MIDI %s removed" typeName) |> Some)
+      | _ -> if selected <> originalSelected
+             then false, (warning (sprintf "MIDI %s changed!" typeName) |> Some)
+             else false, None
 
-    match outputs with
-    | [] -> { model with MidiErrorMessage = Some "No outputs found"
-                         MidiEnabled = false
-                         SelectedMIDIOutput = None
-                         MidiOutputs = [] }, Cmd.batch [ (warning "No outputs found") ]
-    | (id, _)::rest ->
-      match model.SelectedMIDIOutput with
-      | None ->
-        { model with SelectedMIDIOutput = Some id
-                     MidiEnabled = true
-                     MidiOutputs = outputs
-                     MidiErrorMessage = None }, (info "New MIDI output found!")
-      | (Some oId) when (oId = id) || (rest |> List.exists (fun (key, _) -> oId = key)) ->
-        let cmd = match model.MidiOutputs.Length, outputs.Length with
-                  | o,n when o > n -> info "MIDI output removed"
-                  | o,n when o < n -> info "New MIDI output found"
-                  | _ -> Cmd.none
+    let outputs = midiAccess.Outputs |> Map.toList        
+    let selectedOutput = getSelectedId midiAccess.Outputs model.SelectedMIDIOutput 
+    let outputsError, outputsNotification = 
+      getNotificationMessage outputs 
+                             model.MidiOutputs
+                             selectedOutput
+                             model.SelectedMIDIOutput
+                             "output"
 
-        { model with MidiEnabled = true
-                     MidiOutputs = outputs
-                     MidiErrorMessage = None }, cmd
-      | _ ->
-        { model with SelectedMIDIOutput = Some id
-                     MidiEnabled = true
-                     MidiOutputs = outputs
-                     MidiErrorMessage = None }, (warning "MIDI output changed!")
+    let inputs = midiAccess.Inputs |> Map.toList
+    let selectedInput = getSelectedId midiAccess.Inputs model.SelectedMIDIInput
+    let inputsError, inputsNotification =
+      getNotificationMessage inputs
+                             model.MidiInputs
+                             selectedInput
+                             model.SelectedMIDIInput
+                             "input"
 
+    let errorMessage =
+      if inputsError && outputsError 
+      then Some "No inputs or outputs found!"
+      else None
+    
+    let newModel =
+      { model with MidiErrorMessage = errorMessage
+                   MidiEnabled = errorMessage |> Option.isNone
+                   MidiOutputs = outputs
+                   MidiInputs = inputs }
+    let cmd = 
+      match inputsNotification, outputsNotification with
+      | Some inError, Some outError -> Cmd.batch [ outError; inError ]
+      | Some inError, _ -> inError
+      | _, Some outError -> outError
+      | _-> Cmd.none
+
+    newModel, Cmd.batch [ yield cmd
+                          match selectedOutput with
+                          | Some o -> yield (MidiOutputChanged o) |> Cmd.ofMsg
+                          | None -> ()
+                          match selectedInput with
+                          | Some i -> yield (MidiInputChanged i) |> Cmd.ofMsg
+                          | None -> ()
+                        ]
 
   | MidiMessage m -> { model with MidiMessages = (m :: model.MidiMessages) |> List.truncate 5 }, Cmd.none
   | MidiOutputChanged id -> { model with SelectedMIDIOutput = Some id }, Cmd.none
+  | MidiInputChanged id -> 
+    let onMidiMessageSub (dispatch: Dispatch<Msg>) = 
+      let onMidiMessage (ev: IMIDIMessageEvent) =
+        match ev.Data |> validateSysexData with
+        | None ->
+          match ev.Data |> loadPatch with
+          | Some patch -> dispatch (PatchLoaded patch)
+          | None -> ()
+        | Some err -> ()
+
+      match id, model.SelectedMIDIInput with
+      | ("", Some oldId) ->
+        match model.MidiInputs |> List.tryFind (fun (i, _)  -> i = oldId) |> Option.map snd with
+        | Some oldInput -> oldInput.OnMidiMessage <- DoNothing
+        | None -> ()
+      | (id, None) when id <> "" ->
+        match model.MidiInputs |> List.tryFind (fun (i, _)  -> i = id) |> Option.map snd with
+        | Some i -> 
+          i.OnMidiMessage <- onMidiMessage
+        | None -> ()
+      | (id, Some oldId) when oldId <> id ->
+        match model.MidiInputs |> List.tryFind (fun (i, _)  -> i = oldId) |> Option.map snd with
+        | Some oldInput -> oldInput.OnMidiMessage <- DoNothing
+        | None -> ()
+
+        match model.MidiInputs |> List.tryFind (fun (i, _)  -> i = id) |> Option.map snd with
+        | Some i -> 
+          Browser.console.log i
+          i.OnMidiMessage <- onMidiMessage
+        | None -> ()
+      | _ -> ()
+
+    { model with SelectedMIDIInput = Some id }, Cmd.ofSub onMidiMessageSub
   | MidiChannelChanged c -> { model with SelectedMIDIChannel = c }, Cmd.none
-  | InitPatch -> { model with Patch = initPatch ()
-                              PermaLink = initPatch () |> Patch.encode }, Cmd.ofMsg SendSysex
-  | SavePatch -> model, Cmd.ofFunc savePatch model.Patch (fun _ -> MidiMessage (S.Success, "saved.")) (fun ex -> SendError ex.Message)
+  | InitPatch -> model, Cmd.ofMsg (PatchLoaded (initPatch ()))
+  | SavePatch -> model, Cmd.ofFunc savePatch 
+                                   model.Patch 
+                                   (fun _ -> MidiMessage (S.Success "saved.")) 
+                                   (fun ex -> SendError ex.Message)
   | SendSysex ->
     match model.SelectedMIDIOutput with
     | None -> model, error "No Output selected!"
@@ -326,6 +412,10 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
         match validateSysexData data with
         | Some msg -> model, error msg
         | _ -> model, Cmd.ofPromise (sysexData >> MIDI.send output) model (fun _ -> SendSuccess) (fun ex -> SendError ex.Message)
+  | PermalinkChanged ->
+    let permalink = model.Patch |> Patch.encode
+    Browser.window.location.hash <- ("?patch=" + permalink)
+    { model with PermaLink = permalink }, Cmd.none    
   | FileToLoadChanged fileList ->
     if fileList.Length = 0
     then model, Cmd.none
@@ -335,9 +425,10 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
     | Some blob ->
       model, Cmd.ofPromise checkSysexFileLoad blob id (fun ex -> SendError ex.Message)
     | _ -> model, Cmd.none
-  | PatchLoaded patch -> { model with Patch = patch
-                                      PermaLink = patch |> Patch.encode }, Cmd.batch [ Cmd.ofMsg SendSysex
-                                                                                       success (sprintf "Loaded patch %s" patch.PatchName) ]
+  | PatchLoaded patch -> 
+    { model with Patch = patch } |> updateOperatorTypes, Cmd.batch [ Cmd.ofMsg SendSysex
+                                                                     Cmd.ofMsg PermalinkChanged
+                                                                     success (sprintf "Loaded patch %s" patch.PatchName) ]
 
 let mkSlider min max format dispatch onComplete description (value: byte) event =
   R.div [ P.ClassName "form-group slider custom-labels"] [
@@ -472,11 +563,23 @@ let view model dispatch =
               | Some m -> yield R.str m
               | _ -> ()
             | true ->
-              yield S.select "MIDI input device" [ P.Value (model.SelectedMIDIOutput |> Option.defaultValue "")
-                                                   P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (!! ev.target?value))) ] [
-                  for k, o in model.MidiOutputs do
-                    yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
-              ]
+              match model.MidiOutputs with
+              | [] -> ()
+              | _ ->
+                yield S.select "Send to MIDI device" [ P.Value (model.SelectedMIDIOutput |> Option.defaultValue "")
+                                                       P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (!! ev.target?value))) ] [
+                    for k, o in model.MidiOutputs do
+                      yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
+                ]
+
+              match model.MidiInputs with
+              | [] -> ()
+              | _ ->
+                yield S.select "Receive from MIDI device" [ P.Value (model.SelectedMIDIInput |> Option.defaultValue "")
+                                                            P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiInputChanged (!! ev.target?value))) ] [
+                    for k, o in model.MidiInputs do
+                      yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
+                ]
 
               yield S.select "MIDI channel" [ P.Value (string model.SelectedMIDIChannel)
                                               P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [

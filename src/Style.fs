@@ -5,20 +5,25 @@ open Fable.Import.React
 module R = Fable.Helpers.React
 module P = R.Props
 
-type MessagePriority =
-  | Info
-  | Success
-  | Warning
-  | Error
+type Alert =
+  | Info of string
+  | Success of string
+  | Warning of string
+  | Error of string
 
-type Alert = MessagePriority*string
-
-let alert (p, msg) =
+let alert p =
   let alertClass = match p with
-                   | Info -> "alert-info"      
-                   | Success -> "alert-success"      
-                   | Warning -> "alert-warning"
-                   | Error -> "alert-danger"
+                   | Info _ -> "alert-info"      
+                   | Success _ -> "alert-success"      
+                   | Warning _ -> "alert-warning"
+                   | Error  _-> "alert-danger"
+
+  let msg = match p with
+            | Info msg -> msg
+            | Success msg -> msg
+            | Warning msg -> msg
+            | Error msg -> msg
+
   R.div [ P.ClassName ("alert " + alertClass) ] [ R.str msg ]
 
 
