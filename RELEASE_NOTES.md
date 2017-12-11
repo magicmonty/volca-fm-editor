@@ -1,3 +1,6 @@
+### 0.1.0 - 2017-12-11
+* Switched UI from sliders to knobs
+
 ### 0.0.8 - 2017-12-11
 * Fix off by one error on algorithm
 

@@ -6,14 +6,12 @@ open Fable.Core.JsInterop
 open Fable.Import
 open WebMIDI
 open Elmish
-open Slider
 open VolcaFM
-open Fable.Import.WebMIDI
-open Fable.Import.WebMIDI
 
 module S = Client.Style
 module R = Fable.Helpers.React
 module P = Fable.Helpers.React.Props
+module K = VolcaEditor.Knob
 
 module String =
   let isNotEmpty v = not (System.String.IsNullOrEmpty v)
@@ -316,7 +314,9 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
              then false, (warning (sprintf "MIDI %s changed!" typeName) |> Some)
              else false, None
 
-    let outputs = midiAccess.Outputs |> Map.toList        
+    let outputs = midiAccess.Outputs 
+                  |> Map.toList
+                  |> List.filter (fun (_, o) -> o.Name |> Option.filter (fun v -> v <> "") |> Option.isSome)
     let selectedOutput = getSelectedId midiAccess.Outputs model.SelectedMIDIOutput 
     let outputsError, outputsNotification = 
       getNotificationMessage outputs 
@@ -325,7 +325,9 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
                              model.SelectedMIDIOutput
                              "output"
 
-    let inputs = midiAccess.Inputs |> Map.toList
+    let inputs = midiAccess.Inputs 
+                 |> Map.toList 
+                 |> List.filter (fun (_, i) -> i.Name |> Option.filter (fun v -> v <> "") |> Option.isSome)
     let selectedInput = getSelectedId midiAccess.Inputs model.SelectedMIDIInput
     let inputsError, inputsNotification =
       getNotificationMessage inputs
@@ -430,31 +432,12 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
                                                                      Cmd.ofMsg PermalinkChanged
                                                                      success (sprintf "Loaded patch %s" patch.PatchName) ]
 
-let mkSlider min max format dispatch onComplete description (value: byte) event =
-  R.div [ P.ClassName "form-group slider custom-labels"] [
-    R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str (sprintf "%s (%s)" description (format (int value))) ]
-    slider [ Min min
-             Max max
-             Value (int value)
-             Format format
-             OnChange (byte >> event >> dispatch)
-             OnChangeComplete onComplete ]
-  ]
-
-let card title content =
-  R.div [ P.ClassName "col" ] [
-    R.div [ P.ClassName "card" ] [
-      R.div [ P.ClassName "card-header" ] [ R.strong [] [ R.str title ] ]
-      R.div [ P.ClassName "card-body" ] content
-    ]
-  ]
-
 /// Constructs the view for the application given the model.
 let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) : React.ReactElement =
   let operatorSliderComplete () = dispatch OperatorSliderComplete
-  let mkSlider99 = mkSlider 0 99 string dispatch operatorSliderComplete
-  let mkSlider3 = mkSlider 0 3 string dispatch operatorSliderComplete
-  let mkSliderCurve =
+  let mkKnob99 = S.knob 0 99 string dispatch operatorSliderComplete
+  let mkKnob3 = S.knob 0 3 string dispatch operatorSliderComplete
+  let mkKnobCurve =
     let format = function
                  | 0 -> "-LIN"
                  | 1 -> "-EXP"
@@ -462,9 +445,9 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
                  | 3 -> "LIN"
                  | _ -> "?"
 
-    mkSlider 0 3 format dispatch operatorSliderComplete
+    S.knob 0 3 format dispatch operatorSliderComplete
 
-  let mkSlider7 = mkSlider 0 7 string dispatch operatorSliderComplete
+  let mkKnob7 = S.knob 0 7 string dispatch operatorSliderComplete
 
   let bodyClassName = if model.Enabled then " show" else ""
   let cardClass = if operatorType = Carrier then " text-white bg-success" else " text-white bg-info"
@@ -482,52 +465,75 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
     ]
 
     R.div [ P.ClassName ("card-body collapse" + bodyClassName) ] [
-
-      R.div [ P.ClassName "row" ] [
-        card  "Envelope rates" [
-          mkSlider99 "EG Rate 1" model.EGRate1 EGRate1Changed
-          mkSlider99 "EG Rate 2" model.EGRate2 EGRate2Changed
-          mkSlider99 "EG Rate 3" model.EGRate3 EGRate3Changed
-          mkSlider99 "EG Rate 4" model.EGRate4 EGRate4Changed
-        ]
-        card "Envelope Levels" [
-          mkSlider99 "EG Level 1" model.EGLevel1 EGLevel1Changed
-          mkSlider99 "EG Level 2" model.EGLevel2 EGLevel2Changed
-          mkSlider99 "EG Level 3" model.EGLevel3 EGLevel3Changed
-          mkSlider99 "EG Level 4" model.EGLevel4 EGLevel4Changed
-        ]
-        card "Operator scaling" [
-          mkSlider99 "Level Scale Breakpoint" model.LevelScaleBreakpoint LevelScaleBreakpointChanged
-          mkSlider99 "Level Scale Left Depth" model.LevelScaleLeftDepth LevelScaleLeftDepthChanged
-          mkSlider99 "Level Scale Right Depth" model.LevelScaleRightDepth LevelScaleRightDepthChanged
-          mkSliderCurve "Level Scale Left Curve" model.LevelScaleLeftCurve LevelScaleLeftCurveChanged
-          mkSliderCurve "Level Scale Right Curve" model.LevelScaleRightCurve LevelScaleRightCurveChanged
-          mkSlider7 "Oscillator Rate Scale" model.OscillatorRateScale OscillatorRateScaleChanged
-        ]
-        card "Operator tuning" [
-          mkSlider 0 14 string dispatch operatorSliderComplete "Detune" model.Detune DetuneChanged
-          mkSlider 0 31 string dispatch operatorSliderComplete "Frequency Coarse" model.FrequencyCoarse FrequencyCoarseChanged
-          mkSlider99 "Frequency Fine" model.FrequencyFine FrequencyFineChanged
-
-          R.div [ P.ClassName "form-group" ] [
-            R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Oscillator mode" ]
-            R.br []
-            S.radioInline "Ratio" "0" (model.OscillatorMode = 0uy) (fun _ -> dispatch (OscillatorModeChanged 0uy))
-            S.radioInline "Fixed" "1" (model.OscillatorMode = 1uy) (fun _ -> dispatch (OscillatorModeChanged 1uy))
+      S.row [
+        S.col [
+          S.card  "Envelope rates" [
+            S.row [
+              S.col [ mkKnob99 "EG Rate 1" model.EGRate1 EGRate1Changed ]
+              S.col [ mkKnob99 "EG Rate 2" model.EGRate2 EGRate2Changed ]
+            ]
+            S.row [
+              S.col [ mkKnob99 "EG Rate 3" model.EGRate3 EGRate3Changed ]
+              S.col [ mkKnob99 "EG Rate 4" model.EGRate4 EGRate4Changed ]
+            ]
           ]
         ]
-        card "Operator Levels and Sensitivity" [
-          mkSlider3 "Amp Mod Sense" model.AmpModSense AmpModSenseChanged
-          mkSlider7 "Key Velocity Sense" model.KeyVelocitySense KeyVelocitySenseChanged
-          mkSlider99 "Operator Output Level" model.OperatorOutputLevel OperatorOutputLevelChanged
+        S.col [
+          S.card "Operator tuning" [
+            S.row [
+              S.col [ S.knob 0 14 string dispatch operatorSliderComplete "Detune" model.Detune DetuneChanged ]
+              S.col [ S.knob 0 31 string dispatch operatorSliderComplete "Frequency Coarse" model.FrequencyCoarse FrequencyCoarseChanged ]
+            ]
+            S.row [
+              S.col [ S.toggle "Oscillator mode" "Ratio" 0uy "Fixed" 1uy model.OscillatorMode (OscillatorModeChanged >> dispatch) ]
+              S.col [ mkKnob99 "Frequency Fine" model.FrequencyFine FrequencyFineChanged ]
+            ]
+          ]
         ]
+      ]
+      S.row [
+        S.col [
+          S.card "Envelope Levels" [
+            S.row [
+              S.col [ mkKnob99 "EG Level 1" model.EGLevel1 EGLevel1Changed ]
+              S.col [ mkKnob99 "EG Level 2" model.EGLevel2 EGLevel2Changed ]
+            ]
+            S.row [
+              S.col [ mkKnob99 "EG Level 3" model.EGLevel3 EGLevel3Changed ]
+              S.col [ mkKnob99 "EG Level 4" model.EGLevel4 EGLevel4Changed ]
+            ]
+          ]
+        ]
+        S.col [
+          S.card "Operator Levels and Sensitivity" [
+            S.row [
+              S.col [ mkKnob3 "Amp Mod Sense" model.AmpModSense AmpModSenseChanged ]
+              S.col [ mkKnob7 "Key Velocity Sense" model.KeyVelocitySense KeyVelocitySenseChanged ]
+            ]
+            S.row [
+              S.col [ mkKnob99 "Operator Output Level" model.OperatorOutputLevel OperatorOutputLevelChanged ]
+            ]
+          ]
+        ]
+      ]
+      S.rowcol [
+        S.card "Operator scaling" [
+          S.row [
+            S.col [ mkKnob99 "Level Scale Breakpoint" model.LevelScaleBreakpoint LevelScaleBreakpointChanged ]
+            S.col [ mkKnob99 "Level Scale Left Depth" model.LevelScaleLeftDepth LevelScaleLeftDepthChanged ]
+            S.col [ mkKnob99 "Level Scale Right Depth" model.LevelScaleRightDepth LevelScaleRightDepthChanged ]              
+            S.col [ mkKnobCurve "Level Scale Left Curve" model.LevelScaleLeftCurve LevelScaleLeftCurveChanged ]
+            S.col [ mkKnobCurve "Level Scale Right Curve" model.LevelScaleRightCurve LevelScaleRightCurveChanged ]
+            S.col [ mkKnob7 "Oscillator Rate Scale" model.OscillatorRateScale OscillatorRateScaleChanged ]
+          ]
+        ]              
       ]
     ]
   ]
 
 let view model dispatch =
   let sliderComplete () = dispatch SliderComplete
-  let mkSlider99 = mkSlider 0 99 string dispatch sliderComplete
+  let mkKnob99 = S.knob 0 99 string dispatch sliderComplete
   let formatWave =
     function
     | 0 -> "TRI"
@@ -541,11 +547,7 @@ let view model dispatch =
   let formatAlgorithm = ((+) 1) >> string
 
   let operator title opType opModel opMsg =
-    R.div [ P.ClassName "row" ] [
-      R.div [ P.ClassName "col" ] [
-        viewOperator opModel opType title (opMsg >> dispatch)
-      ]
-    ]
+    viewOperator opModel opType title (opMsg >> dispatch)
 
   R.div [ P.ClassName "container-fluid"] [
     yield S.githubBanner
@@ -553,129 +555,166 @@ let view model dispatch =
         R.str "Volca FM Patch editor "
         R.span [ P.ClassName "badge badge-pill badge-secondary" ] [ R.str (sprintf "V%s" ReleaseNotes.Version) ]
     ]
-    yield R.div [ P.ClassName "row mt-2" ] [
-      card "Setup" [
-        R.div [ P.ClassName "row" ] [
-          card "Midi device setup" [
-            match model.MidiEnabled with
-            | false ->
-              match model.MidiErrorMessage with
-              | Some m -> yield R.str m
-              | _ -> ()
-            | true ->
-              match model.MidiOutputs with
-              | [] -> ()
-              | _ ->
-                yield S.select "Send to MIDI device" [ P.Value (model.SelectedMIDIOutput |> Option.defaultValue "")
-                                                       P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (!! ev.target?value))) ] [
-                    for k, o in model.MidiOutputs do
-                      yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
-                ]
 
-              match model.MidiInputs with
-              | [] -> ()
-              | _ ->
-                yield S.select "Receive from MIDI device" [ P.Value (model.SelectedMIDIInput |> Option.defaultValue "")
-                                                            P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiInputChanged (!! ev.target?value))) ] [
-                    for k, o in model.MidiInputs do
-                      yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
-                ]
+    yield S.rowcol [
+      S.card "Setup" [
+        S.row [
+          S.col [
+            S.card "Midi device setup" [
+              match model.MidiEnabled with
+              | false ->
+                match model.MidiErrorMessage with
+                | Some m -> yield R.str m
+                | _ -> ()
+              | true ->
+                match model.MidiOutputs with
+                | [] -> ()
+                | _ ->
+                  yield S.select "Send to MIDI device" [ P.Value (model.SelectedMIDIOutput |> Option.defaultValue "")
+                                                         P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiOutputChanged (!! ev.target?value))) ] [
+                      for k, o in model.MidiOutputs do
+                        yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
+                  ]
 
-              yield S.select "MIDI channel" [ P.Value (string model.SelectedMIDIChannel)
-                                              P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
-                  for i in 1..16 do
-                    yield R.option [ i |> string |> P.Value ] [ i |> string |> R.str ]
-              ]
+                match model.MidiInputs with
+                | [] -> ()
+                | _ ->
+                  yield S.select "Receive from MIDI device" [ P.Value (model.SelectedMIDIInput |> Option.defaultValue "")
+                                                              P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiInputChanged (!! ev.target?value))) ] [
+                      for k, o in model.MidiInputs do
+                        yield R.option [ P.Value k ] [ R.str (o.Name |> Option.defaultValue "?") ]
+                  ]
+
+                yield S.select "MIDI channel" [ P.Value (string model.SelectedMIDIChannel)
+                                                P.OnChange (fun (ev:React.FormEvent) -> dispatch (MidiChannelChanged (byte !! ev.target?value))) ] [
+                    for i in 1..16 do
+                      yield R.option [ i |> string |> P.Value ] [ i |> string |> R.str ]
+                ]
+            ]
           ]
 
-          card "Save / Load / Share" [
-            R.div [ P.ClassName "form-group" ] [
-              R.div [ P.ClassName "btn-group" ] [
-                R.button [ P.ClassName "btn btn-primary"
-                           P.Type "button"
-                           P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
-                R.button [ P.ClassName "btn btn-primary"
-                           P.Type "button"
-                           P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
+          S.col [
+            S.card "Save / Load / Share" [
+              R.div [ P.ClassName "form-group" ] [
+                R.div [ P.ClassName "btn-group" ] [
+                  R.button [ P.ClassName "btn btn-primary"
+                             P.Type "button"
+                             P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
+                  R.button [ P.ClassName "btn btn-primary"
+                             P.Type "button"
+                             P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
+                ]
               ]
-            ]
 
-            R.div [ P.ClassName "form-group" ] [
-              R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
-              R.input [ P.Type "file"
-                        P.ClassName "form-control-file"
-                        P.Value ""
-                        P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
-            ]
+              R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
+                R.input [ P.Type "file"
+                          P.ClassName "form-control-file"
+                          P.Value ""
+                          P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
+              ]
 
-            R.a [ P.Href (sprintf "#?patch=%s" model.PermaLink) ] [ R.str "Permalink"]
+              R.a [ P.Href (sprintf "#?patch=%s" model.PermaLink) ] [ R.str "Permalink"]
+            ]
           ]
-          card "Midi messages" [
-            for msg in model.MidiMessages do
-              yield S.alert msg
+
+          S.col [
+            S.card "Messages" [
+              for msg in model.MidiMessages do
+                yield S.alert msg
+            ]
           ]
         ]
       ]
     ]
 
     if model.MidiEnabled then
-      yield R.div [ P.ClassName "row mt-2" ] [
-        card "Global voice controls" [
-          R.div [ P.ClassName "row" ] [
-            card "Operator settings" [
-              mkSlider 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged
-              mkSlider 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged
-              R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Oscillator Key Sync" ]
-                R.br []
-                S.radioInline "Off" "0" (model.Patch.OscillatorKeySync = 0uy) (fun _ -> dispatch (OscillatorKeySyncChanged 0uy))
-                S.radioInline "On" "1" (model.Patch.OscillatorKeySync = 1uy) (fun _ -> dispatch (OscillatorKeySyncChanged 1uy))
+      let operatorSettings =
+        S.card "Operator settings" [
+          S.row [
+            S.col [ S.knob 0 7 string dispatch sliderComplete "Feedback" model.Patch.Feedback FeedbackChanged ]
+            S.col [ S.knob 0 48 string dispatch sliderComplete "Transpose" model.Patch.Transpose TransposeChanged ]
+          ]
+          S.row [
+            S.col [ S.toggle "Oscillator Key Sync" "Off" 0uy "On" 1uy model.Patch.OscillatorKeySync (OscillatorKeySyncChanged >> dispatch) ]
+            S.col [ S.knob 0 31 formatAlgorithm dispatch sliderComplete "Algorithm" model.Patch.Algorithm AlgorithmChanged ]
+          ]
+        ]
+      let pitchEnvelopeRates =
+        S.card "Pitch envelope rates" [
+          S.row [
+            S.col [ mkKnob99 "Pitch EG R1" model.Patch.PitchRate1 PitchRate1Changed ]
+            S.col [ mkKnob99 "Pitch EG R2" model.Patch.PitchRate2 PitchRate2Changed ]
+            S.col [ mkKnob99 "Pitch EG R3" model.Patch.PitchRate3 PitchRate3Changed ]
+            S.col [ mkKnob99 "Pitch EG R4" model.Patch.PitchRate4 PitchRate4Changed ]
+          ]
+        ]
+      let patchSettings =
+        S.card "Patch settings" [
+          R.div [ P.ClassName "form-group" ] [
+            R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Patch name" ]
+            R.input [ P.ClassName "form-control form-control-sm"
+                      P.Type "text"
+                      P.Value model.Patch.PatchName
+                      P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
+          ]
+        ]
+      let pitchEnvelopeLevels =
+        S.card "Pitch envelope levels" [
+          S.row [
+            S.col [ mkKnob99 "Pitch EG L1" model.Patch.PitchLevel1 PitchLevel1Changed ]
+            S.col [ mkKnob99 "Pitch EG L2" model.Patch.PitchLevel2 PitchLevel2Changed ]
+            S.col [ mkKnob99 "Pitch EG L3" model.Patch.PitchLevel3 PitchLevel3Changed ]
+            S.col [ mkKnob99 "Pitch EG L4" model.Patch.PitchLevel4 PitchLevel4Changed ]
+          ]
+        ]
+      let lfoSettings = 
+        S.card "LFO settings" [
+          S.row [
+            S.col [ mkKnob99 "LFO Speed" model.Patch.LFOSpeed LFOSpeedChanged ]
+            S.col [ S.knob 0 5 formatWave dispatch sliderComplete "LFO Wave Shape" model.Patch.LFOWaveShape LFOWaveShapeChanged ]
+            S.col [ mkKnob99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged ]
+          ]
+          S.row [
+            S.col [ mkKnob99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged ]
+            S.col [ mkKnob99 "LFO Delay" model.Patch.LFODelay LFODelayChanged ]
+            S.col [ S.knob 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged ]
+          ]
+          S.rowcol [ S.toggle "LFO Key Sync" "Off" 0uy "On" 0uy model.Patch.LFOKeySync (LFOKeySyncChanged >> dispatch) ]
+        ]
+        
+      yield S.row [
+        S.col [
+          S.card "Global voice controls" [
+            S.row [
+              S.col [
+                S.container [
+                  S.rowcol [ patchSettings ]
+                  S.rowcol [ operatorSettings]
+                ]
               ]
-              mkSlider 0 48 string dispatch sliderComplete "Transpose" model.Patch.Transpose TransposeChanged
-            ]
-            card "Pitch envelope rates" [
-              mkSlider99 "Pitch EG R1" model.Patch.PitchRate1 PitchRate1Changed
-              mkSlider99 "Pitch EG R2" model.Patch.PitchRate2 PitchRate2Changed
-              mkSlider99 "Pitch EG R3" model.Patch.PitchRate3 PitchRate3Changed
-              mkSlider99 "Pitch EG R4" model.Patch.PitchRate4 PitchRate4Changed
-            ]
-            card "Pitch envelope levels" [
-              mkSlider99 "Pitch EG L1" model.Patch.PitchLevel1 PitchLevel1Changed
-              mkSlider99 "Pitch EG L2" model.Patch.PitchLevel2 PitchLevel2Changed
-              mkSlider99 "Pitch EG L3" model.Patch.PitchLevel3 PitchLevel3Changed
-              mkSlider99 "Pitch EG L4" model.Patch.PitchLevel4 PitchLevel4Changed
-            ]
-            card "LFO settings" [
-              mkSlider99 "LFO Speed" model.Patch.LFOSpeed LFOSpeedChanged
-              mkSlider 0 5 formatWave dispatch sliderComplete "LFO Wave Shape" model.Patch.LFOWaveShape LFOWaveShapeChanged
-              mkSlider99 "LFO Pitch Mod Depth" model.Patch.LFOPitchModDepth LFOPitchModDepthChanged
-              mkSlider99 "LFO Amp Mod Depth" model.Patch.LFOAmpModDepth LFOAmpModDepthChanged
-              mkSlider99 "LFO Delay" model.Patch.LFODelay LFODelayChanged
-              R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "LFO Key Sync" ]
-                R.br []
-                S.radioInline "Off" "0" (model.Patch.LFOKeySync = 0uy) (fun _ -> dispatch (LFOKeySyncChanged 0uy))
-                S.radioInline "On" "1" (model.Patch.LFOKeySync = 1uy) (fun _ -> dispatch (LFOKeySyncChanged 1uy))
-              ]
-              mkSlider 0 7 string dispatch sliderComplete "Pitch Mod Sensitivity" model.Patch.PitchModSensitivity PitchModSensitivityChanged
-            ]
-            card "Patch settings" [
-              R.div [ P.ClassName "form-group" ] [
-                R.label [ P.ClassName "col-form-label col-form-label-sm" ] [ R.str "Patch name" ]
-                R.input [ P.ClassName "form-control form-control-sm"
-                          P.Type "text"
-                          P.Value model.Patch.PatchName
-                          P.OnChange (fun (ev:React.FormEvent) -> dispatch (PatchNameChanged !! ev.target?value)) ]
+              S.col [ lfoSettings ]
+              S.col [
+                S.container [
+                  S.rowcol [ pitchEnvelopeRates]
+                  S.rowcol [ pitchEnvelopeLevels ]
+                ]
               ]
             ]
           ]
         ]
       ]
 
-      yield operator "Operator 1" model.Operator1Type model.Patch.Operator1 Operator1Msg
-      yield operator "Operator 2" model.Operator2Type model.Patch.Operator2 Operator2Msg
-      yield operator "Operator 3" model.Operator3Type model.Patch.Operator3 Operator3Msg
-      yield operator "Operator 4" model.Operator4Type model.Patch.Operator4 Operator4Msg
-      yield operator "Operator 5" model.Operator5Type model.Patch.Operator5 Operator5Msg
-      yield operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg
+      yield S.row [ 
+        S.col [ operator "Operator 1" model.Operator1Type model.Patch.Operator1 Operator1Msg ] 
+        S.col [ operator "Operator 2" model.Operator2Type model.Patch.Operator2 Operator2Msg ] 
+      ]
+      yield S.row [ 
+        S.col [ operator "Operator 3" model.Operator3Type model.Patch.Operator3 Operator3Msg ] 
+        S.col [ operator "Operator 4" model.Operator4Type model.Patch.Operator4 Operator4Msg ] 
+      ]
+      yield S.row [ 
+        S.col [ operator "Operator 5" model.Operator5Type model.Patch.Operator5 Operator5Msg ] 
+        S.col [ operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg ] 
+      ]
   ]

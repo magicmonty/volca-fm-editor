@@ -19,7 +19,7 @@
 	"deploy":true,
 	"docs/output/":true,
 	"temp/":true,
-	"node_modules":true,
+	"node_modules":false,
 	"src/Client/public/":true,
 	"src/**/bin":true,
 	"src/**/obj":true,

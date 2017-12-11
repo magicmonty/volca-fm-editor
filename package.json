@@ -7,9 +7,13 @@
     "phantomjs-prebuilt": "^2.1.7",
     "react": "^16.2.0",
     "react-bootstrap": "^0.31.5",
+    "react-canvas-knob": "^0.5.0",
     "react-datetime": "^2.11.0",
     "react-dom": "^16.2.0",
     "react-rangeslider": "^2.2.0",
+    "react-transform-catch-errors": "^1.0.2",
+    "react-transform-hmr": "^1.0.4",
+    "redbox-react": "^1.5.0",
     "remotedev": "0.2.7"
   },
   "devDependencies": {
