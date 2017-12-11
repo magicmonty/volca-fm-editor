@@ -1,3 +1,6 @@
+### 0.0.8 - 2017-12-11
+* Fix off by one error on algorithm
+
 ### 0.0.7 - 2017-12-10
 * Possibility to receive patches from MIDI devices
 

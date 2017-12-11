@@ -271,7 +271,7 @@ let toSysexMessage patch : byte list =
         patch.PitchLevel2
         patch.PitchLevel3
         patch.PitchLevel4
-        patch.Algorithm - 1uy
+        patch.Algorithm
         patch.Feedback
         patch.OscillatorKeySync
         patch.LFOSpeed

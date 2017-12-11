@@ -370,7 +370,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
           match ev.Data |> loadPatch with
           | Some patch -> dispatch (PatchLoaded patch)
           | None -> ()
-        | Some err -> ()
+        | Some _ -> ()
 
       match id, model.SelectedMIDIInput with
       | ("", Some oldId) ->
