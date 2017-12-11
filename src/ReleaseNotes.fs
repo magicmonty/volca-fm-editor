@@ -1,10 +1,13 @@
 module internal ReleaseNotes
 
-let Version = "0.0.8"
+let Version = "0.0.9"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.0.9 - 2017-12-11
+* Fix for #1: Save button should be desabled or hidden if there is nothing to save
+
 ### 0.0.8 - 2017-12-11
 * Fix off by one error on algorithm
 
