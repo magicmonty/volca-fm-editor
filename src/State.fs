@@ -589,26 +589,29 @@ let view model dispatch =
           ]
 
           card "Save / Load / Share" [
-            R.div [ P.ClassName "form-group" ] [
+            yield R.div [ P.ClassName "form-group" ] [
               R.div [ P.ClassName "btn-group" ] [
-                R.button [ P.ClassName "btn btn-primary"
-                           P.Type "button"
+                R.button [ P.Type "button"
+                           P.ClassName "btn btn-primary"
+                           P.Disabled (not model.MidiEnabled)
                            P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
-                R.button [ P.ClassName "btn btn-primary"
-                           P.Type "button"
+                R.button [ P.Type "button"
+                           P.ClassName "btn btn-primary"
+                           P.Disabled (not model.MidiEnabled)
                            P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
               ]
             ]
 
-            R.div [ P.ClassName "form-group" ] [
-              R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
-              R.input [ P.Type "file"
-                        P.ClassName "form-control-file"
-                        P.Value ""
-                        P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
-            ]
+            if model.MidiEnabled then
+              yield R.div [ P.ClassName "form-group" ] [
+                R.label [ P.ClassName " col-form-label" ] [ R.strong [] [ R.str "Load patch" ] ]
+                R.input [ P.Type "file"
+                          P.ClassName "form-control-file"
+                          P.Value ""
+                          P.OnChange (fun (ev:React.FormEvent) -> dispatch (FileToLoadChanged (!! ev.target?files)))]
+              ]
 
-            R.a [ P.Href (sprintf "#?patch=%s" model.PermaLink) ] [ R.str "Permalink"]
+              yield R.a [ P.Href (sprintf "#?patch=%s" model.PermaLink) ] [ R.str "Permalink"]
           ]
           card "Midi messages" [
             for msg in model.MidiMessages do
