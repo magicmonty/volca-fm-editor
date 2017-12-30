@@ -596,14 +596,13 @@ let view model dispatch =
           S.col [
             S.card "Save / Load / Share" [
               yield R.div [ P.ClassName "form-group" ] [
-                let buttonClass = if model.MidiEnabled then "btn btn-primary" else "btn btn-primary"
                 yield R.div [ P.ClassName "btn-group" ] [
                   R.button [ P.Type "button"
-                             P.ClassName buttonClass
+                             P.ClassName "btn btn-primary"
                              P.Disabled (not model.MidiEnabled)
                              P.OnClick (fun _ -> dispatch InitPatch)] [ R.str "Init Patch" ]
                   R.button [ P.Type "button"
-                             P.ClassName buttonClass
+                             P.ClassName "btn btn-primary"
                              P.Disabled (not model.MidiEnabled)
                              P.OnClick (fun _ -> dispatch SavePatch)] [ R.str "Save Patch" ]
                 ]
