@@ -42,7 +42,7 @@ type KnobProps =
     | DisplayCustom of (unit -> ReactElement)
     interface IKnobProp
 
-let Knob : React.ComponentClass<obj> = JsInterop.importDefault "react-canvas-knob/index.js"
+let Knob : React.ComponentClass<obj> = JsInterop.importDefault "react-canvas-uiknob/index.js"
 
 let inline knob (props: IKnobProp list) =
     React.from Knob (JsInterop.keyValueList CaseRules.LowerFirst props) []
