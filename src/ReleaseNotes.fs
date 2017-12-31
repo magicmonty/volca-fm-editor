@@ -1,10 +1,13 @@
 module internal ReleaseNotes
 
-let Version = "0.1.0"
+let Version = "0.2.0"
 
 let IsPrerelease = false
 
 let Notes = """
+### 0.2.0 - 2017-12-31
+* Add live envelope display for all operators
+
 ### 0.1.0 - 2017-12-30
 * Switched UI from sliders to knobs
 
