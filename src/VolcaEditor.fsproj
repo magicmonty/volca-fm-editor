@@ -9,6 +9,7 @@
     <Compile Include="Slider.fs" />
     <Compile Include="Base64.fs" />
     <Compile Include="VolcaFM.fs" />
+    <Compile Include="EnvDisplay.fs" />
     <Compile Include="Style.fs" />
     <Compile Include="State.fs" />
     <Compile Include="App.fs" />

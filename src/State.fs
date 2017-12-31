@@ -12,6 +12,7 @@ module S = Client.Style
 module R = Fable.Helpers.React
 module P = Fable.Helpers.React.Props
 module K = VolcaEditor.Knob
+module ED = VolcaEditor.EnvDisplay
 
 module String =
   let isNotEmpty v = not (System.String.IsNullOrEmpty v)
@@ -35,9 +36,21 @@ type Model = { MidiEnabled : bool
                SelectedMIDIInput : string option
                SelectedMIDIChannel : byte
                FileToLoad : Browser.Blob option
-               PermaLink : string }
+               PermaLink : string
+               EnvDisplay1: ED.Model
+               EnvDisplay2: ED.Model
+               EnvDisplay3: ED.Model
+               EnvDisplay4: ED.Model
+               EnvDisplay5: ED.Model
+               EnvDisplay6: ED.Model }
 
-             static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })
+             static member patch = (fun m -> m.Patch), (fun value m -> { m with Patch = value })             
+             static member envDisplay1 = (fun m -> m.EnvDisplay1), (fun value m -> { m with EnvDisplay1 = value })
+             static member envDisplay2 = (fun m -> m.EnvDisplay2), (fun value m -> { m with EnvDisplay2 = value })
+             static member envDisplay3 = (fun m -> m.EnvDisplay3), (fun value m -> { m with EnvDisplay3 = value })
+             static member envDisplay4 = (fun m -> m.EnvDisplay4), (fun value m -> { m with EnvDisplay4 = value })
+             static member envDisplay5 = (fun m -> m.EnvDisplay5), (fun value m -> { m with EnvDisplay5 = value })
+             static member envDisplay6 = (fun m -> m.EnvDisplay6), (fun value m -> { m with EnvDisplay6 = value })
 
 type OperatorMsg =
   | EnabledChanged of bool
@@ -63,6 +76,7 @@ type OperatorMsg =
   | KeyVelocitySenseChanged of byte
   | OperatorOutputLevelChanged of byte
   | OperatorSliderComplete
+  | EnvDisplayMsg of EnvDisplay.Msg
 
 type Msg =
   | AlgorithmChanged of byte
@@ -175,6 +189,9 @@ let init () : Model*Cmd<Msg> =
       |> Option.defaultValue (initPatch ())
     | _ -> initPatch ()
 
+  let envDisplay id (op: Operator) =
+    ED.init id op
+
   let m =
     { MidiEnabled = false
       Patch = patch
@@ -193,38 +210,49 @@ let init () : Model*Cmd<Msg> =
       SelectedMIDIInput = None
       SelectedMIDIChannel = 1uy
       FileToLoad = None
-      PermaLink = patch |> Patch.encode }
+      PermaLink = patch |> Patch.encode
+      EnvDisplay1 = envDisplay "envDisplayOp1" patch.Operator1
+      EnvDisplay2 = envDisplay "envDisplayOp2" patch.Operator2
+      EnvDisplay3 = envDisplay "envDisplayOp3" patch.Operator3
+      EnvDisplay4 = envDisplay "envDisplayOp4" patch.Operator4
+      EnvDisplay5 = envDisplay "envDisplayOp5" patch.Operator5
+      EnvDisplay6 = envDisplay "envDisplayOp6" patch.Operator6 }
     |> updateOperatorTypes
 
   m, (Cmd.ofPromise MIDI.requestAccess [ Sysex true ] MidiSuccess MidiError)
 
-let updateOperator msg model op: Model =
+let updateOperator msg model op opCmd edLens edValue: Model*Cmd<Msg> =
   let operator = Model.patch >-> op
 
+  let operatorChanged m = 
+    let cmd = m |> Optic.get operator |> ED.OperatorChanged |> EnvDisplayMsg |> opCmd |> Cmd.ofMsg
+    m, cmd
+
   match msg with
-  | EnabledChanged v -> model |> Optic.set (operator >-> Operator.enabled) v
-  | EGRate1Changed v -> model |> Optic.set (operator >-> Operator.eGRate1) v
-  | EGRate2Changed v -> model |> Optic.set (operator >-> Operator.eGRate2) v
-  | EGRate3Changed v -> model |> Optic.set (operator >-> Operator.eGRate3) v
-  | EGRate4Changed v -> model |> Optic.set (operator >-> Operator.eGRate4) v
-  | EGLevel1Changed v -> model |> Optic.set (operator >-> Operator.eGLevel1) v
-  | EGLevel2Changed v -> model |> Optic.set (operator >-> Operator.eGLevel2) v
-  | EGLevel3Changed v -> model |> Optic.set (operator >-> Operator.eGLevel3) v
-  | EGLevel4Changed v -> model |> Optic.set (operator >-> Operator.eGLevel4) v
-  | LevelScaleBreakpointChanged v -> model |> Optic.set (operator >-> Operator.levelScaleBreakpoint) v
-  | LevelScaleLeftDepthChanged v -> model |> Optic.set (operator >-> Operator.levelScaleLeftDepth) v
-  | LevelScaleRightDepthChanged v -> model |> Optic.set (operator >-> Operator.levelScaleRightDepth) v
-  | LevelScaleLeftCurveChanged v -> model |> Optic.set (operator >-> Operator.levelScaleLeftCurve) v
-  | LevelScaleRightCurveChanged v -> model |> Optic.set (operator >-> Operator.levelScaleRightCurve) v
-  | OscillatorRateScaleChanged v -> model |> Optic.set (operator >-> Operator.oscillatorRateScale) v
-  | DetuneChanged v -> model |> Optic.set (operator >-> Operator.detune) v
-  | FrequencyCoarseChanged v -> model |> Optic.set (operator >-> Operator.frequencyCoarse) v
-  | FrequencyFineChanged v -> model |> Optic.set (operator >-> Operator.frequencyFine) v
-  | OscillatorModeChanged v -> model |> Optic.set (operator >-> Operator.oscillatorMode) v
-  | AmpModSenseChanged v -> model |> Optic.set (operator >-> Operator.ampModSense) v
-  | KeyVelocitySenseChanged v -> model |> Optic.set (operator >-> Operator.keyVelocitySense) v
-  | OperatorOutputLevelChanged v -> model |> Optic.set (operator >-> Operator.operatorOutputLevel) v
-  | OperatorSliderComplete -> model
+  | EnabledChanged v -> (model |> Optic.set (operator >-> Operator.enabled) v) |> operatorChanged
+  | EGRate1Changed v -> (model |> Optic.set (operator >-> Operator.eGRate1) v) |> operatorChanged 
+  | EGRate2Changed v -> (model |> Optic.set (operator >-> Operator.eGRate2) v) |> operatorChanged
+  | EGRate3Changed v -> (model |> Optic.set (operator >-> Operator.eGRate3) v) |> operatorChanged
+  | EGRate4Changed v -> (model |> Optic.set (operator >-> Operator.eGRate4) v) |> operatorChanged
+  | EGLevel1Changed v -> (model |> Optic.set (operator >-> Operator.eGLevel1) v) |> operatorChanged
+  | EGLevel2Changed v -> (model |> Optic.set (operator >-> Operator.eGLevel2) v) |> operatorChanged
+  | EGLevel3Changed v -> (model |> Optic.set (operator >-> Operator.eGLevel3) v) |> operatorChanged
+  | EGLevel4Changed v -> (model |> Optic.set (operator >-> Operator.eGLevel4) v) |> operatorChanged
+  | LevelScaleBreakpointChanged v -> (model |> Optic.set (operator >-> Operator.levelScaleBreakpoint) v) |> operatorChanged
+  | LevelScaleLeftDepthChanged v -> (model |> Optic.set (operator >-> Operator.levelScaleLeftDepth) v) |> operatorChanged
+  | LevelScaleRightDepthChanged v -> (model |> Optic.set (operator >-> Operator.levelScaleRightDepth) v) |> operatorChanged
+  | LevelScaleLeftCurveChanged v -> (model |> Optic.set (operator >-> Operator.levelScaleLeftCurve) v) |> operatorChanged
+  | LevelScaleRightCurveChanged v -> (model |> Optic.set (operator >-> Operator.levelScaleRightCurve) v) |> operatorChanged
+  | OscillatorRateScaleChanged v -> (model |> Optic.set (operator >-> Operator.oscillatorRateScale) v) |> operatorChanged
+  | DetuneChanged v -> (model |> Optic.set (operator >-> Operator.detune) v) |> operatorChanged
+  | FrequencyCoarseChanged v -> (model |> Optic.set (operator >-> Operator.frequencyCoarse) v) |> operatorChanged
+  | FrequencyFineChanged v -> (model |> Optic.set (operator >-> Operator.frequencyFine) v) |> operatorChanged
+  | OscillatorModeChanged v -> (model |> Optic.set (operator >-> Operator.oscillatorMode) v) |> operatorChanged
+  | AmpModSenseChanged v -> (model |> Optic.set (operator >-> Operator.ampModSense) v) |> operatorChanged
+  | KeyVelocitySenseChanged v -> (model |> Optic.set (operator >-> Operator.keyVelocitySense) v) |> operatorChanged
+  | OperatorOutputLevelChanged v -> (model |> Optic.set (operator >-> Operator.operatorOutputLevel) v) |> operatorChanged
+  | OperatorSliderComplete -> model |> operatorChanged
+  | EnvDisplayMsg m -> (model |> Optic.set edLens (ED.update m edValue)), Cmd.none
 
 let onStateChange (ev: IMIDIConnectionEvent) =
   Browser.console.log ev
@@ -262,17 +290,17 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
                       | _ -> v
       (model |> Optic.set (patch >-> Patch.patchName) patchName), Cmd.ofMsg SliderComplete
   | Operator1Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator1Msg msg -> (updateOperator msg model Patch.operator1), Cmd.none
+  | Operator1Msg msg -> updateOperator msg model Patch.operator1 Operator1Msg Model.envDisplay1 model.EnvDisplay1
   | Operator2Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator2Msg msg -> (updateOperator msg model Patch.operator2), Cmd.none
+  | Operator2Msg msg -> updateOperator msg model Patch.operator2 Operator2Msg Model.envDisplay2 model.EnvDisplay2
   | Operator3Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator3Msg msg -> (updateOperator msg model Patch.operator3), Cmd.none
+  | Operator3Msg msg -> updateOperator msg model Patch.operator3 Operator3Msg Model.envDisplay3 model.EnvDisplay3
   | Operator4Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator4Msg msg -> (updateOperator msg model Patch.operator4), Cmd.none
+  | Operator4Msg msg -> updateOperator msg model Patch.operator4 Operator4Msg Model.envDisplay4 model.EnvDisplay4
   | Operator5Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator5Msg msg -> (updateOperator msg model Patch.operator5), Cmd.none
+  | Operator5Msg msg -> updateOperator msg model Patch.operator5 Operator5Msg Model.envDisplay5 model.EnvDisplay5
   | Operator6Msg OperatorSliderComplete -> model, Cmd.ofMsg SliderComplete
-  | Operator6Msg msg -> (updateOperator msg model Patch.operator6), Cmd.none
+  | Operator6Msg msg -> updateOperator msg model Patch.operator6 Operator6Msg Model.envDisplay6 model.EnvDisplay6
   | SliderComplete ->
     model, Cmd.batch [ Cmd.ofMsg SendSysex
                        Cmd.ofMsg PermalinkChanged ]
@@ -417,7 +445,17 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
   | PermalinkChanged ->
     let permalink = model.Patch |> Patch.encode
     Browser.window.location.hash <- ("?patch=" + permalink)
-    { model with PermaLink = permalink }, Cmd.none    
+    
+    let opsChanged =
+      let op o omsg = o |> ED.OperatorChanged |> EnvDisplayMsg |> omsg |> Cmd.ofMsg
+      Cmd.batch [ op model.Patch.Operator1 Operator1Msg
+                  op model.Patch.Operator2 Operator2Msg
+                  op model.Patch.Operator3 Operator3Msg
+                  op model.Patch.Operator4 Operator4Msg
+                  op model.Patch.Operator5 Operator5Msg
+                  op model.Patch.Operator6 Operator6Msg ]
+
+    { model with PermaLink = permalink }, opsChanged
   | FileToLoadChanged fileList ->
     if fileList.Length = 0
     then model, Cmd.none
@@ -433,7 +471,7 @@ let update (msg: Msg) (model: Model) : Model*Cmd<Msg> =
                                                                      success (sprintf "Loaded patch %s" patch.PatchName) ]
 
 /// Constructs the view for the application given the model.
-let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) : React.ReactElement =
+let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> unit) envelopeDisplay : React.ReactElement =
   let operatorSliderComplete () = dispatch OperatorSliderComplete
   let mkKnob99 = S.knob 0 99 string dispatch operatorSliderComplete
   let mkKnob3 = S.knob 0 3 string dispatch operatorSliderComplete
@@ -467,7 +505,7 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
     R.div [ P.ClassName ("card-body collapse" + bodyClassName) ] [
       S.row [
         S.col [
-          S.card  "Envelope rates" [
+          S.cardWithHeaderContent "Envelope rates" envelopeDisplay [
             S.row [
               S.col [ mkKnob99 "EG Rate 1" model.EGRate1 EGRate1Changed ]
               S.col [ mkKnob99 "EG Rate 2" model.EGRate2 EGRate2Changed ]
@@ -515,7 +553,7 @@ let viewOperator (model: Operator) operatorType title (dispatch: OperatorMsg -> 
             ]
           ]
         ]
-      ]
+      ]      
       S.rowcol [
         S.card "Operator scaling" [
           S.row [
@@ -708,16 +746,23 @@ let view model dispatch =
         ]
       ]
 
+      let ed1 = ED.view model.EnvDisplay1 (EnvDisplayMsg >> Operator1Msg >> dispatch)
+      let ed2 = ED.view model.EnvDisplay2 (EnvDisplayMsg >> Operator2Msg >> dispatch)
+      let ed3 = ED.view model.EnvDisplay3 (EnvDisplayMsg >> Operator3Msg >> dispatch)
+      let ed4 = ED.view model.EnvDisplay4 (EnvDisplayMsg >> Operator4Msg >> dispatch)
+      let ed5 = ED.view model.EnvDisplay5 (EnvDisplayMsg >> Operator5Msg >> dispatch)
+      let ed6 = ED.view model.EnvDisplay6 (EnvDisplayMsg >> Operator6Msg >> dispatch)
+
       yield S.row [ 
-        S.col [ operator "Operator 1" model.Operator1Type model.Patch.Operator1 Operator1Msg ] 
-        S.col [ operator "Operator 2" model.Operator2Type model.Patch.Operator2 Operator2Msg ] 
+        S.col [ operator "Operator 1" model.Operator1Type model.Patch.Operator1 Operator1Msg [ ed1 ] ] 
+        S.col [ operator "Operator 2" model.Operator2Type model.Patch.Operator2 Operator2Msg [ ed2 ] ] 
       ]
       yield S.row [ 
-        S.col [ operator "Operator 3" model.Operator3Type model.Patch.Operator3 Operator3Msg ] 
-        S.col [ operator "Operator 4" model.Operator4Type model.Patch.Operator4 Operator4Msg ] 
+        S.col [ operator "Operator 3" model.Operator3Type model.Patch.Operator3 Operator3Msg [ ed3 ] ] 
+        S.col [ operator "Operator 4" model.Operator4Type model.Patch.Operator4 Operator4Msg [ ed4 ] ] 
       ]
       yield S.row [ 
-        S.col [ operator "Operator 5" model.Operator5Type model.Patch.Operator5 Operator5Msg ] 
-        S.col [ operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg ] 
+        S.col [ operator "Operator 5" model.Operator5Type model.Patch.Operator5 Operator5Msg [ ed5 ] ] 
+        S.col [ operator "Operator 6" model.Operator6Type model.Patch.Operator6 Operator6Msg [ ed6 ] ] 
       ]
   ]

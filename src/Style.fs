@@ -7,6 +7,7 @@ open Fable.AST.Fable
 module R = Fable.Helpers.React
 module P = R.Props
 module K = VolcaEditor.Knob
+module ED = VolcaEditor.EnvDisplay
 
 type Alert =
   | Info of string
@@ -71,6 +72,14 @@ let rowcol content = row [ col content ]
 let card title content =
   R.div [ P.ClassName "card" ] [
     R.div [ P.ClassName "card-header" ] [ R.strong [] [ R.str title ] ]
+    R.div [ P.ClassName "card-body container-fluid" ] content
+  ]
+
+let cardWithHeaderContent title (header: ReactElement list) content =
+  R.div [ P.ClassName "card" ] [
+    R.div [ P.ClassName "card-header" ] [ yield R.strong [] [ R.str title ]
+                                          for e in header do
+                                            yield e ]
     R.div [ P.ClassName "card-body container-fluid" ] content
   ]
 
